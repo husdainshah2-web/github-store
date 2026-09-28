@@ -21,7 +21,7 @@ function storedName(filename) {
   return safe || 'file.bin';
 }
 
-async function insertObject(api, { filename, buffer, mime_type }) {
+async function insertObject(api, { filename, buffer, mime_type, idempotencyKey }) {
   if (!buffer || !buffer.length) {
     const e = new Error('Empty body');
     e.status = 422; e.code = 'INVALID_REQUEST';
@@ -36,6 +36,19 @@ async function insertObject(api, { filename, buffer, mime_type }) {
     const e = new Error('File exceeds GitHub 100 MiB limit');
     e.status = 413; e.code = 'FILE_TOO_LARGE';
     throw e;
+  }
+
+  let idemPath = null;
+  if (idempotencyKey) {
+    const safe = String(idempotencyKey).replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 80);
+    if (safe) {
+      idemPath = `idempotency/${api.api_id}/${safe}.json`;
+      const existing = await engine.readJson(idemPath);
+      if (existing && existing.object_id) {
+        const prev = await engine.getObject(existing.object_id);
+        if (prev) return { object_id: prev.object_id, status: 'stored', tx_id: existing.tx_id, meta: prev, idempotent: true };
+      }
+    }
   }
 
   const oid = objectId();
@@ -90,6 +103,7 @@ async function insertObject(api, { filename, buffer, mime_type }) {
     indexChange,
     apiRec ? { path: engine.paths.apiPath(api.api_id), contentUtf8: JSON.stringify(apiRec, null, 2) } : null,
     { path: engine.paths.txPath(tx.tx_id), contentUtf8: JSON.stringify(tx, null, 2) },
+    idemPath ? { path: idemPath, contentUtf8: JSON.stringify({ object_id: oid, tx_id: tx.tx_id }, null, 2) } : null,
   ].filter(Boolean));
 
   engine.cache.objects.set(oid, meta);

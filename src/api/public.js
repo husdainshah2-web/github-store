@@ -43,6 +43,7 @@ function fileFromReq(req) {
 router.post('/objects', rateLimit('upload'), upload.single('file'), wrap(async (req, res) => {
   const file = fileFromReq(req);
   if (!file) return fail(res, 422, 'INVALID_REQUEST', 'file or content required');
+  file.idempotencyKey = req.get('Idempotency-Key');
   const result = await ops.insertObject(req.api, file);
   await engine.appendAudit({
     at: engine.nowIso(), type: 'object_inserted', api_id: req.api.api_id, object_id: result.object_id,

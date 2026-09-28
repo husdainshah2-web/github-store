@@ -1,4 +1,5 @@
 const config = require('../config');
+const limits = require('../monitoring/githubLimits');
 
 const BASE = 'https://api.github.com';
 
@@ -31,6 +32,15 @@ async function gh(method, path, body, extra = {}) {
     }
   }
   const res = await fetch(url, opts);
+  limits.capture(res);
+  if (res.status === 403 && limits.state.remaining === 0) {
+    const wait = Math.max(1, (limits.state.reset || 0) - Math.floor(Date.now() / 1000));
+    const e = new Error('GITHUB_RATE_LIMIT');
+    e.status = 429;
+    e.code = 'GITHUB_RATE_LIMIT';
+    e.retryAfter = wait;
+    throw e;
+  }
   const text = await res.text();
   let json = null;
   try { json = text ? JSON.parse(text) : null; } catch { json = text; }

@@ -155,9 +155,9 @@ function assertOwner(api, obj) {
     throw e;
   }
   if (api.role !== 'admin' && obj.api_id !== api.api_id) {
-    const e = new Error('FORBIDDEN');
-    e.code = 'FORBIDDEN';
-    e.status = 403;
+    const e = new Error('OBJECT_NOT_FOUND');
+    e.code = 'OBJECT_NOT_FOUND';
+    e.status = 404;
     throw e;
   }
 }
