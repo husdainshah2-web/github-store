@@ -135,6 +135,26 @@ router.delete('/objects/:id', wrap(async (req, res) => {
 
 router.post('/rebuild-index', wrap(async (req, res) => ok(res, await engine.rebuildIndex())));
 
+router.post('/backup', wrap(async (req, res) => {
+  const { createLatestBackup } = require('../worker/backup');
+  return ok(res, await createLatestBackup(), 201);
+}));
+
+router.post('/recycle/sweep', wrap(async (req, res) => {
+  const { sweepTrash } = require('../worker/recycle');
+  return ok(res, await sweepTrash());
+}));
+
+router.get('/policy', wrap(async (req, res) => ok(res, {
+  version: '2.2.4.5',
+  database_repo: `${config.owner}/${config.databaseRepo}`,
+  data_repos: config.dataRepos.length,
+  recycle_days: config.recycleDays,
+  max_file_size: config.maxFileSize,
+  backup_path: config.backupPath,
+  backup_policy: 'overwrite-only',
+})));
+
 router.get('/objects/:id/verify', wrap(async (req, res) => ok(res, await ops.verifyObject(req.params.id))));
 
 router.get('/health-db', wrap(async (req, res) => {

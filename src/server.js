@@ -22,7 +22,7 @@ const startedAt = Date.now();
 let ready = false;
 
 app.get('/version', (req, res) => {
-  res.json({ engine: 'GitHubOnlyDB', version: '1.2.0', format_version: 1, brand: 'GitDB' });
+  res.json({ engine: 'GitHubOnlyDB', version: '2.2.4.5', format_version: 2, brand: 'GitDB' });
 });
 
 app.get('/metrics', (req, res) => {
@@ -37,7 +37,8 @@ app.get('/metrics', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
-    engine: 'github-store',
+    engine: 'GitDB',
+    version: '2.2.4.5',
     database: config.databaseRepo,
     data_repos: config.dataRepos.length,
     uptime_s: Math.floor((Date.now() - startedAt) / 1000),
@@ -77,6 +78,7 @@ async function start() {
   try {
     await bootstrap();
     ready = true;
+    require('./worker/recycle').startRecycleWorker();
   } catch (err) {
     console.error('Bootstrap failed:', err.message);
   }

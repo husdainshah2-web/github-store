@@ -298,7 +298,7 @@ async function snapshots(el) {
 async function recycle(el) {
   const d = await api('/objects');
   const trash = (d.items||[]).filter(o => o.status === 'trash' || o.status === 'deleted');
-  el.innerHTML = trash.length ? trash.map(o=>`<div class="card p-3 mb-2 flex justify-between"><div class="mono text-xs">${o.object_id}</div><button data-id="${o.object_id}" class="res text-xs px-2 py-1 bg-[#12151c] rounded">Restore</button></div>`).join('') : empty('Recycle bin is empty.');
+  el.innerHTML = `<div class="text-sm text-slate-400 mb-3">Trash 15 din ke baad automatic permanent delete. Backup zip hamesha backups/latest.zip overwrite hota hai.</div>` + (trash.length ? trash.map(o=>`<div class="card p-3 mb-2 flex justify-between"><div class="mono text-xs">${o.object_id}</div><button data-id="${o.object_id}" class="res text-xs px-2 py-1 bg-[#12151c] rounded">Restore</button></div>`).join('') : empty('Recycle bin is empty.'));
   el.querySelectorAll('.res').forEach(b => b.onclick = async () => { await api('/objects/'+b.dataset.id+'/restore',{method:'POST'}); go('recycle'); });
 }
 
@@ -363,10 +363,17 @@ async function doctor(el) {
 }
 
 async function settings(el) {
-  const h = await api('/health-db');
+  const h = await api('/policy');
   el.innerHTML = `<div class="card p-4 text-sm space-y-2">
-    <div>Database repo: <span class="mono">${h.database_repo}</span></div>
-    <div>Write mode: ${h.write_mode||'NORMAL'}</div>
-    <div class="text-slate-500">Secrets stay in environment variables. GitHub token is never shown here.</div>
+    <div>Version: ${h.version}</div>
+    <div>Database (only one): <span class="mono">${h.database_repo}</span></div>
+    <div>Live storage repos: ${h.data_repos}</div>
+    <div>Recycle: ${h.recycle_days} days then permanent delete</div>
+    <div>Upload limit: ${Math.round(h.max_file_size/1024/1024)} MB</div>
+    <div>Backup: ${h.backup_path} (${h.backup_policy})</div>
+    <button id="mk-bak" class="mt-3 px-3 py-2 bg-teal-500 text-black rounded-lg text-sm font-semibold">Write latest backup zip</button>
+    <button id="sweep" class="mt-3 px-3 py-2 bg-[#12151c] border border-white/10 rounded-lg text-sm">Sweep recycle now</button>
   </div>`;
+  document.getElementById('mk-bak').onclick = async () => { toast('Writing backup'); const r = await api('/backup',{method:'POST'}); toast('Backup '+r.bytes+' bytes'); };
+  document.getElementById('sweep').onclick = async () => { const r = await api('/recycle/sweep',{method:'POST'}); toast('Purged '+r.purged); };
 }
