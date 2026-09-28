@@ -53,6 +53,23 @@ router.get('/overview', wrap(async (req, res) => {
 
 router.get('/apis', wrap(async (req, res) => ok(res, await engine.listApis())));
 
+router.get('/apis/:id', wrap(async (req, res) => {
+  const rec = await engine.getApi(req.params.id);
+  if (!rec || rec.status === 'deleted') return fail(res, 404, 'NOT_FOUND', 'API not found');
+  const api_key = engine.revealApiKey(rec);
+  const safe = { ...rec };
+  delete safe.key_hash;
+  delete safe.key_enc;
+  return ok(res, { ...safe, api_key });
+}));
+
+router.delete('/apis/:id', wrap(async (req, res) => {
+  const result = await engine.deleteApi(req.params.id);
+  if (!result) return fail(res, 404, 'NOT_FOUND', 'API not found');
+  await engine.appendAudit({ at: engine.nowIso(), type: 'api_deleted', api_id: req.params.id }).catch(() => {});
+  return ok(res, result);
+}));
+
 router.post('/apis', wrap(async (req, res) => {
   const name = (req.body && req.body.name) || 'Untitled API';
   const created = await engine.createApi(name);

@@ -192,16 +192,27 @@ async function overview(el) {
 
 async function apis(el) {
   const list = await api('/apis');
-  el.innerHTML = `<div id="keybox" class="hidden mb-3 card p-3 text-sm text-amber-200"></div>
+  el.innerHTML = `<div id="keybox" class="hidden mb-3 card p-3 text-sm break-all"></div>
     <div class="card overflow-hidden">
       <table class="w-full text-sm"><thead class="text-slate-500 text-left"><tr><th class="p-3">Name</th><th>ID</th><th>Status</th><th>Objects</th><th></th></tr></thead>
-      <tbody>${list.map(a=>`<tr class="border-t border-white/5">
+      <tbody>${list.map(a=>`<tr class="border-t border-white/5 openapi" data-id="${a.api_id}" style="cursor:pointer">
         <td class="p-3">${a.name}</td><td class="mono text-xs">${a.api_id}</td>
         <td>${a.status}</td><td>${a.object_count||0}</td>
-        <td class="p-3 text-right"><button data-id="${a.api_id}" data-st="${a.status}" class="tog text-xs px-2 py-1 bg-[#12151c] rounded">Toggle</button>
-        <button data-id="${a.api_id}" class="rot text-xs px-2 py-1 bg-[#12151c] rounded">Rotate</button></td>
+        <td class="p-3 text-right" onclick="event.stopPropagation()">
+          <button data-id="${a.api_id}" data-st="${a.status}" class="tog text-xs px-2 py-1 bg-[#12151c] rounded">Toggle</button>
+          <button data-id="${a.api_id}" class="rot text-xs px-2 py-1 bg-[#12151c] rounded">Rotate</button>
+          <button data-id="${a.api_id}" data-name="${a.name}" class="del text-xs px-2 py-1 bg-red-900/40 rounded">Delete</button>
+        </td>
       </tr>`).join('')||''}</tbody></table>
     </div>${list.length? '':'<div class="mt-4">'+empty('No APIs yet. Create your first API.')+'</div>'}`;
+  el.querySelectorAll('.openapi').forEach(row => row.onclick = async () => {
+    const d = await api('/apis/'+row.dataset.id);
+    const box = document.getElementById('keybox');
+    box.classList.remove('hidden');
+    box.innerHTML = `<div class="text-xs text-slate-500 mb-1">${d.name} · ${d.api_id}</div><div class="mono text-teal-300">${d.api_key || 'Purani API — Rotate dabao, naya dtbsprsl key milega'}</div><button id="copykey" class="mt-2 text-xs px-2 py-1 bg-[#12151c] rounded">Copy key</button>`;
+    const btn = document.getElementById('copykey');
+    if (btn && d.api_key) btn.onclick = async () => { await navigator.clipboard.writeText(d.api_key); toast('Key copied'); };
+  });
   el.querySelectorAll('.tog').forEach(b => b.onclick = async () => {
     const path = b.dataset.st === 'active' ? '/disable' : '/enable';
     await api('/apis/'+b.dataset.id+path, {method:'POST'});
@@ -210,6 +221,13 @@ async function apis(el) {
   el.querySelectorAll('.rot').forEach(b => b.onclick = async () => {
     const r = await api('/apis/'+b.dataset.id+'/rotate-key', {method:'POST'});
     alert('New key:\n'+r.api_key);
+    go('apis');
+  });
+  el.querySelectorAll('.del').forEach(b => b.onclick = async () => {
+    if (!confirm('Delete API '+b.dataset.name+'? This cannot be undone from the list.')) return;
+    await api('/apis/'+b.dataset.id, {method:'DELETE'});
+    toast('API deleted');
+    go('apis');
   });
 }
 

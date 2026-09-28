@@ -1,7 +1,7 @@
 const config = require('../config');
 const git = require('../github/client');
 const { nowIso, apiId, objectId, txId, apiKey, shard } = require('../utils/ids');
-const { sha256, hashKey } = require('../utils/hash');
+const { sha256, hashKey, encryptSecret, decryptSecret } = require('../utils/hash');
 const paths = require('../storage/paths');
 const { chooseRepo, repoById } = require('../storage/router');
 
@@ -43,6 +43,7 @@ async function listApis() {
     if (a) {
       const copy = { ...a };
       delete copy.key_hash;
+      delete copy.key_enc;
       out.push(copy);
     }
   }
@@ -68,6 +69,7 @@ async function createApi(name) {
     name,
     status: 'active',
     key_hash: hashKey(raw),
+    key_enc: encryptSecret(raw),
     created_at: nowIso(),
     updated_at: nowIso(),
     object_count: 0,
@@ -96,8 +98,28 @@ async function updateApi(id, patch) {
 
 async function rotateApiKey(id) {
   const raw = apiKey();
-  const rec = await updateApi(id, { key_hash: hashKey(raw) });
+  const rec = await updateApi(id, { key_hash: hashKey(raw), key_enc: encryptSecret(raw) });
   return { api: rec, raw_key: raw };
+}
+
+function revealApiKey(rec) {
+  if (!rec || !rec.key_enc) return null;
+  try { return decryptSecret(rec.key_enc); } catch (e) { return null; }
+}
+
+async function deleteApi(id) {
+  const rec = await getApi(id);
+  if (!rec) return null;
+  const idx = (await readJson('indexes/apis.json')) || { ids: [] };
+  idx.ids = (idx.ids || []).filter((x) => x !== id);
+  rec.status = 'deleted';
+  rec.updated_at = nowIso();
+  await writeDb(`delete api ${id}`, [
+    { path: paths.apiPath(id), contentUtf8: JSON.stringify(rec, null, 2) },
+    { path: 'indexes/apis.json', contentUtf8: JSON.stringify(idx, null, 2) },
+  ]);
+  cache.apis.delete(id);
+  return { deleted: true, api_id: id };
 }
 
 async function getObject(objectIdValue) {
@@ -191,6 +213,8 @@ module.exports = {
   createApi,
   updateApi,
   rotateApiKey,
+  revealApiKey,
+  deleteApi,
   getObject,
   listObjectIdsForApi,
   setApiIndex,

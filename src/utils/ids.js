@@ -13,7 +13,10 @@ function txId() {
 }
 
 function apiKey() {
-  return 'gdb_live_' + crypto.randomBytes(24).toString('hex');
+  const groups = [];
+  for (let i = 0; i < 10; i += 1) groups.push(String(crypto.randomInt(100, 1000)));
+  groups.push(String(crypto.randomInt(10, 100)));
+  return 'dtbsprsl-' + groups.join('-');
 }
 
 function sanitizeCollection(name) {
