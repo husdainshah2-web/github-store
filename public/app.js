@@ -358,7 +358,7 @@ async function playground(el) {
 
 async function doctor(el) {
   const d = await api('/doctor');
-  el.innerHTML = `<div class="card p-4 mb-3">Engine ${d.engine} · format ${d.format_version}</div>` +
+  el.innerHTML = `<div class="card p-4 mb-3">Engine ${d.engine} ${d.version||''} · checked ${d.checked_at||''} · ${d.cached?'cached real probe':'fresh probe'}</div>` +
     d.checks.map(c => `<div class="card p-3 mb-2 flex justify-between"><span>${c.name}</span><span class="${c.result==='PASS'?'text-teal-300':'text-red-300'}">${c.result}</span></div>`).join('');
 }
 

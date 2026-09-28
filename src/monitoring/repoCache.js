@@ -20,7 +20,7 @@ function liteRepos() {
 async function refreshRepos() {
   const names = [`${config.owner}/${config.databaseRepo}`, ...config.dataRepos];
   const out = [];
-  const chunk = 6;
+  const chunk = 12;
   for (let i = 0; i < names.length; i += chunk) {
     const slice = names.slice(i, i + chunk);
     const part = await Promise.all(slice.map(async (name) => {

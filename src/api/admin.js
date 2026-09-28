@@ -27,17 +27,15 @@ router.get('/overview', wrap(async (req, res) => {
   let objects = 0;
   for (const a of apis) objects += a.object_count || 0;
   const force = req.query.refresh === '1';
-  const repos = force || req.query.full === '1'
-    ? await repoCache.getRepos(force)
-    : (repoCache.cache.repos.length ? repoCache.cache.repos : repoCache.liteRepos());
-  if (!repoCache.cache.repos.length) repoCache.getRepos(false).catch(() => {});
+  const repos = await repoCache.getRepos(force);
   return ok(res, {
     apis: apis.length,
     objects,
     data_repos: config.dataRepos.length,
     database_repo: `${config.owner}/${config.databaseRepo}`,
     repos,
-    cached: !force,
+    checked_at: repoCache.cache.at ? new Date(repoCache.cache.at).toISOString() : null,
+    cached: !force && Date.now() - repoCache.cache.at < repoCache.cache.ttlMs,
   });
 }));
 
@@ -182,23 +180,32 @@ router.post('/snapshots', wrap(async (req, res) => {
 }));
 
 router.get('/doctor', wrap(async (req, res) => {
+  const repoCache = require('../monitoring/repoCache');
+  const force = req.query.refresh === '1';
+  const repos = await repoCache.getRepos(force);
   const checks = [];
-  const push = (name, okFlag, detail) => checks.push({ name, result: okFlag ? 'PASS' : 'FAIL', detail });
-  push('github_token', Boolean(config.githubToken), 'present');
-  try {
-    await git.getRepo(config.databaseRepo);
-    push('database_repo', true, config.databaseRepo);
-  } catch (err) {
-    push('database_repo', false, 'unreachable');
-  }
-  let dataOk = 0;
-  for (const name of config.dataRepos) {
-    try { await git.getRepo(name); dataOk += 1; } catch (e) { /* skip */ }
-  }
-  push('data_repos', dataOk === config.dataRepos.length, `${dataOk}/${config.dataRepos.length}`);
+  const push = (name, result, detail) => checks.push({ name, result, detail });
+  push('github_token', config.githubToken ? 'PASS' : 'FAIL', config.githubToken ? 'configured' : 'missing');
+  const dbName = `${config.owner}/${config.databaseRepo}`;
+  const db = repos.find((r) => r.role === 'database' || r.name === dbName || r.name === config.databaseRepo);
+  push('database_repo', db && !db.error ? 'PASS' : 'FAIL', db && db.error ? db.error : dbName);
+  const data = repos.filter((r) => r.role === 'data');
+  const dataOk = data.filter((r) => !r.error).length;
+  push('data_repos', dataOk === config.dataRepos.length ? 'PASS' : 'FAIL', `${dataOk}/${config.dataRepos.length} reachable`);
   const idx = await engine.readJson('indexes/apis.json');
-  push('apis_index', Boolean(idx), idx ? `${(idx.ids || []).length} apis` : 'missing');
-  return ok(res, { engine: 'GitHubOnlyDB', format_version: 1, checks });
+  push('apis_index', idx ? 'PASS' : 'FAIL', idx ? `${(idx.ids || []).length} apis` : 'missing');
+  const failed = repos.filter((r) => r.error).map((r) => r.name);
+  if (failed.length) push('unreachable_repos', 'FAIL', failed.join(', '));
+  else push('unreachable_repos', 'PASS', 'none');
+  return ok(res, {
+    engine: 'GitHubOnlyDB',
+    version: '2.2.4.5',
+    format_version: 1,
+    checked_at: repoCache.cache.at ? new Date(repoCache.cache.at).toISOString() : new Date().toISOString(),
+    cached: !force,
+    checks,
+    repos,
+  });
 }));
 
 router.post('/objects/:id/restore', wrap(async (req, res) => {

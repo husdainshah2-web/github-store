@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const config = require('./config');
 const { bootstrap } = require('./db/bootstrap');
+const engine = require('./db/engine');
 const publicApi = require('./api/public');
 const adminApi = require('./api/admin');
 const { securityHeaders } = require('./security/headers');
@@ -77,8 +78,10 @@ async function start() {
   }
   try {
     await bootstrap();
+    await engine.rebuildKeyMap().catch(() => {});
     ready = true;
     require('./worker/recycle').startRecycleWorker();
+    require('./monitoring/repoCache').getRepos(true).catch(() => {});
   } catch (err) {
     console.error('Bootstrap failed:', err.message);
   }

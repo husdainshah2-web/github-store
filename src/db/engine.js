@@ -59,15 +59,25 @@ async function listApis() {
   return out;
 }
 
+const keyMap = new Map();
+
+async function rebuildKeyMap() {
+  keyMap.clear();
+  const idx = (await readJson('indexes/apis.json')) || { ids: [] };
+  for (const id of idx.ids || []) {
+    const a = await getApi(id);
+    if (a && a.key_hash && a.status === 'active') keyMap.set(a.key_hash, a);
+  }
+  return keyMap.size;
+}
+
 async function findApiByKey(rawKey) {
   const hash = hashKey(rawKey);
-  const idx = await readJson('indexes/apis.json');
-  const ids = (idx && idx.ids) || [];
-  for (const id of ids) {
-    const a = await getApi(id);
-    if (a && a.key_hash === hash && a.status === 'active') return a;
-  }
-  return null;
+  const hit = keyMap.get(hash);
+  if (hit && hit.status === 'active') return hit;
+  await rebuildKeyMap();
+  const again = keyMap.get(hash);
+  return again && again.status === 'active' ? again : null;
 }
 
 async function createApi(name) {
@@ -92,6 +102,7 @@ async function createApi(name) {
   ]);
   cache.apis.set(id, rec);
   apisIndexCache = { at: 0, ids: null };
+  if (rec.key_hash) keyMap.set(rec.key_hash, rec);
   return { api: rec, raw_key: raw };
 }
 
@@ -107,8 +118,11 @@ async function updateApi(id, patch) {
 }
 
 async function rotateApiKey(id) {
+  const prev = await getApi(id);
   const raw = apiKey();
   const rec = await updateApi(id, { key_hash: hashKey(raw), key_enc: encryptSecret(raw) });
+  if (prev && prev.key_hash) keyMap.delete(prev.key_hash);
+  if (rec && rec.key_hash) keyMap.set(rec.key_hash, rec);
   return { api: rec, raw_key: raw };
 }
 
@@ -130,6 +144,7 @@ async function deleteApi(id) {
   ]);
   cache.apis.delete(id);
   apisIndexCache = { at: 0, ids: null };
+  if (rec.key_hash) keyMap.delete(rec.key_hash);
   return { deleted: true, api_id: id };
 }
 
@@ -221,6 +236,7 @@ module.exports = {
   getApi,
   listApis,
   findApiByKey,
+  rebuildKeyMap,
   createApi,
   updateApi,
   rotateApiKey,
