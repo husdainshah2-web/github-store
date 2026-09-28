@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: github-store
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GITHUB_OWNER
+        value: husdainshah2-web
+      - key: GITHUB_DATABASE_REPO
+        value: ghs-database
+      - key: GITHUB_DATA_REPOS
+        value: ghs-data-01,ghs-data-02,ghs-data-03,ghs-data-04,ghs-data-05,ghs-data-06,ghs-data-07,ghs-data-08,ghs-data-09
+      - key: MAX_FILE_SIZE
+        value: "52428800"

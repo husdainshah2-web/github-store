@@ -1,0 +1,87 @@
+openapi: 3.0.3
+info:
+  title: GitHub Store API
+  version: 1.0.0
+  description: Object database backed by 9 GitHub data repos + 1 metadata database repo.
+servers:
+  - url: /
+paths:
+  /v1/objects:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: INSERT object
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+          application/json:
+            schema:
+              type: object
+              properties:
+                filename: { type: string }
+                content: { type: string }
+                content_base64: { type: string }
+      responses:
+        '201': { description: stored }
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: LIST own objects
+      responses:
+        '200': { description: list }
+  /v1/objects/{id}:
+    get:
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: metadata }
+        '403': { description: not owner }
+        '404': { description: not found }
+    put:
+      security: [{ bearerAuth: [] }]
+      summary: REWRITE
+      responses:
+        '200': { description: updated }
+    patch:
+      security: [{ bearerAuth: [] }]
+      summary: UPDATE / rename
+      responses:
+        '200': { description: updated }
+    delete:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: deleted }
+    head:
+      security: [{ bearerAuth: [] }]
+      summary: EXISTS
+      responses:
+        '200': { description: exists }
+        '404': { description: missing }
+  /v1/objects/{id}/rename:
+    post:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: renamed }
+  /admin/api/login:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: token }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

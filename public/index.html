@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Store Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div id="login" class="min-h-screen flex items-center justify-center p-6">
+    <form id="login-form" class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+      <h1 class="text-xl font-bold">GitHub Store</h1>
+      <p class="text-sm text-slate-400">Admin dashboard — 10th repo is the database</p>
+      <input id="user" class="w-full px-3 py-2 rounded-lg bg-slate-800" placeholder="username" />
+      <input id="pass" type="password" class="w-full px-3 py-2 rounded-lg bg-slate-800" placeholder="password" />
+      <p id="login-err" class="text-red-400 text-sm hidden"></p>
+      <button class="w-full py-2 rounded-lg bg-emerald-600 font-medium">Sign in</button>
+    </form>
+  </div>
+
+  <div id="app" class="hidden min-h-screen flex">
+    <aside class="w-56 bg-slate-900 border-r border-slate-800 p-4 space-y-2">
+      <div class="font-bold mb-4">GitHub Store</div>
+      <button data-page="overview" class="nav w-full text-left px-3 py-2 rounded-lg bg-slate-800">Overview</button>
+      <button data-page="apis" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">APIs</button>
+      <button data-page="objects" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">Objects</button>
+      <button data-page="repos" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">Repositories</button>
+      <button data-page="database" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">Database</button>
+      <button id="logout" class="w-full text-left px-3 py-2 rounded-lg text-slate-500 mt-8">Logout</button>
+    </aside>
+    <main class="flex-1 p-6">
+      <h2 id="title" class="text-2xl font-semibold mb-4">Overview</h2>
+      <div id="content">Loading…</div>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
