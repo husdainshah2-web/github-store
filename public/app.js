@@ -127,6 +127,49 @@ async function load(page) {
         load('database');
       };
     }
+    if (page === 'doctor') {
+      const d = await api('/doctor');
+      el.innerHTML = `<div class="mb-3 text-slate-400">Engine ${d.engine} format ${d.format_version}</div>` +
+        d.checks.map(c => `<div class="bg-slate-900 border border-slate-800 rounded-lg p-3 mb-2 flex justify-between"><span>${c.name}</span><span class="${c.result==='PASS'?'text-emerald-400':'text-red-400'}">${c.result}</span></div>`).join('');
+    }
+    if (page === 'playground') {
+      el.innerHTML = `<div class="space-y-2 max-w-xl">
+        <input id="pg-key" placeholder="API key gdb_live_..." class="w-full px-3 py-2 bg-slate-800 rounded-lg" />
+        <select id="pg-method" class="w-full px-3 py-2 bg-slate-800 rounded-lg"><option>GET</option><option>POST</option><option>HEAD</option><option>DELETE</option></select>
+        <input id="pg-path" value="/v1/objects" class="w-full px-3 py-2 bg-slate-800 rounded-lg" />
+        <textarea id="pg-body" class="w-full h-28 px-3 py-2 bg-slate-800 rounded-lg" placeholder='{"filename":"note.txt","content":"hello"}'></textarea>
+        <button id="pg-send" class="px-4 py-2 bg-emerald-600 rounded-lg">Send</button>
+        <pre id="pg-out" class="text-xs bg-slate-900 border border-slate-800 rounded-lg p-3 overflow-auto"></pre>
+      </div>`;
+      document.getElementById('pg-send').onclick = async () => {
+        const method = document.getElementById('pg-method').value;
+        const path = document.getElementById('pg-path').value;
+        const key = document.getElementById('pg-key').value;
+        const body = document.getElementById('pg-body').value;
+        const res = await fetch(path, {
+          method,
+          headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+          body: ['POST','PUT','PATCH'].includes(method) && body ? body : undefined,
+        });
+        const text = await res.text();
+        document.getElementById('pg-out').textContent = res.status + '\n' + text;
+      };
+    }
+    if (page === 'console') {
+      el.innerHTML = `<p class="text-slate-400 text-sm mb-2">Commands: help · apis · health · doctor</p>
+        <input id="con-in" class="w-full px-3 py-2 bg-slate-800 rounded-lg" placeholder="help" />
+        <pre id="con-out" class="mt-3 text-sm bg-slate-900 border border-slate-800 rounded-lg p-3 min-h-[160px]"></pre>`;
+      document.getElementById('con-in').onkeydown = async (ev) => {
+        if (ev.key !== 'Enter') return;
+        const cmd = ev.target.value.trim();
+        const out = document.getElementById('con-out');
+        if (cmd === 'help') out.textContent = 'help, apis, health, doctor';
+        else if (cmd === 'apis') out.textContent = JSON.stringify(await api('/apis'), null, 2);
+        else if (cmd === 'health') out.textContent = JSON.stringify(await api('/health-db'), null, 2);
+        else if (cmd === 'doctor') out.textContent = JSON.stringify(await api('/doctor'), null, 2);
+        else out.textContent = 'unknown command';
+      };
+    }
   } catch (ex) {
     el.innerHTML = `<div class="text-red-400">${ex.message}</div>`;
   }

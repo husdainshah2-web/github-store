@@ -5,13 +5,18 @@ function objectMetaPath(objectId) {
   return `objects/${a}/${b}/${objectId}.json`;
 }
 
-function objectDataDir(apiId, objectId) {
+function objectDataDir(apiId, objectId, collection = 'default') {
   const { a, b } = shard(objectId);
-  return `data/${apiId}/${a}/${b}/${objectId}`;
+  return `data/${apiId}/${collection}/${a}/${b}/${objectId}`;
 }
 
-function objectDataPath(apiId, objectId, storedName = 'file.bin') {
-  return `${objectDataDir(apiId, objectId)}/${storedName}`;
+function objectDataPath(apiId, objectId, storedName = 'content', collection = 'default') {
+  return `${objectDataDir(apiId, objectId, collection)}/${storedName}`;
+}
+
+function trashMetaPath(apiId, objectId) {
+  const { a, b } = shard(objectId);
+  return `trash/${apiId}/${a}/${b}/${objectId}.json`;
 }
 
 function apiPath(apiId) {
@@ -34,6 +39,7 @@ module.exports = {
   objectMetaPath,
   objectDataDir,
   objectDataPath,
+  trashMetaPath,
   apiPath,
   apiIndexPath,
   txPath,

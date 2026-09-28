@@ -127,7 +127,59 @@ router.get('/health-db', wrap(async (req, res) => {
     apis_index: apisIdx || { ids: [] },
     cache_apis: engine.cache.apis.size,
     cache_objects: engine.cache.objects.size,
+    write_mode: require('../security/mode').state.writeMode,
   });
+}));
+
+router.post('/mode', wrap(async (req, res) => {
+  const mode = require('../security/mode');
+  const next = mode.setMode((req.body && req.body.mode) || 'NORMAL');
+  return ok(res, { write_mode: next });
+}));
+
+router.post('/snapshots', wrap(async (req, res) => {
+  const heads = {};
+  for (const name of [config.databaseRepo, ...config.dataRepos]) {
+    const ref = await git.getRef(name);
+    heads[name] = ref.object.sha;
+  }
+  const snap = {
+    snapshot_id: 'snap_' + Date.now().toString(36),
+    created_at: new Date().toISOString(),
+    heads,
+  };
+  await engine.writeDb('snapshot ' + snap.snapshot_id, [
+    { path: `snapshots/${snap.snapshot_id}.json`, contentUtf8: JSON.stringify(snap, null, 2) },
+  ]);
+  return ok(res, snap, 201);
+}));
+
+router.get('/doctor', wrap(async (req, res) => {
+  const checks = [];
+  const push = (name, okFlag, detail) => checks.push({ name, result: okFlag ? 'PASS' : 'FAIL', detail });
+  push('github_token', Boolean(config.githubToken), 'present');
+  try {
+    await git.getRepo(config.databaseRepo);
+    push('database_repo', true, config.databaseRepo);
+  } catch (err) {
+    push('database_repo', false, 'unreachable');
+  }
+  let dataOk = 0;
+  for (const name of config.dataRepos) {
+    try { await git.getRepo(name); dataOk += 1; } catch (e) { /* skip */ }
+  }
+  push('data_repos', dataOk === config.dataRepos.length, `${dataOk}/${config.dataRepos.length}`);
+  const idx = await engine.readJson('indexes/apis.json');
+  push('apis_index', Boolean(idx), idx ? `${(idx.ids || []).length} apis` : 'missing');
+  return ok(res, { engine: 'GitHubOnlyDB', format_version: 1, checks });
+}));
+
+router.post('/objects/:id/restore', wrap(async (req, res) => {
+  return ok(res, await ops.restoreObject(req.api, req.params.id));
+}));
+
+router.post('/objects/:id/purge', wrap(async (req, res) => {
+  return ok(res, await ops.purgeObject(req.api, req.params.id));
 }));
 
 module.exports = router;

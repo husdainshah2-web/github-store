@@ -5,6 +5,8 @@ const { ok, fail } = require('../utils/http');
 const { apiAuth, rateLimit, wrap } = require('./middleware');
 const engine = require('../db/engine');
 const ops = require('../worker/ops');
+const { queryApi } = require('../db/query');
+const mode = require('../security/mode');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -40,10 +42,17 @@ function fileFromReq(req) {
   return null;
 }
 
+router.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  return mode.guardWrite(req, res, next);
+});
+
 router.post('/objects', rateLimit('upload'), upload.single('file'), wrap(async (req, res) => {
   const file = fileFromReq(req);
   if (!file) return fail(res, 422, 'INVALID_REQUEST', 'file or content required');
   file.idempotencyKey = req.get('Idempotency-Key');
+  file.collection = (req.body && req.body.collection) || req.query.collection;
+  file.tags = req.body && req.body.tags ? [].concat(req.body.tags) : [];
   const result = await ops.insertObject(req.api, file);
   await engine.appendAudit({
     at: engine.nowIso(), type: 'object_inserted', api_id: req.api.api_id, object_id: result.object_id,
@@ -101,13 +110,29 @@ router.get('/objects/:id/content', wrap(async (req, res) => {
 }));
 
 router.patch('/objects/:id', wrap(async (req, res) => {
-  const obj = await engine.getObject(req.params.id);
-  engine.assertOwner(req.api, obj);
-  if (req.body && req.body.filename) {
-    const updated = await ops.renameObject(req.api, req.params.id, req.body.filename);
-    return ok(res, updated);
-  }
-  return fail(res, 422, 'INVALID_REQUEST', 'Nothing to update');
+  const updated = await ops.patchMetadata(req.api, req.params.id, req.body || {});
+  return ok(res, updated);
+}));
+
+router.post('/objects/:id/restore', wrap(async (req, res) => {
+  return ok(res, await ops.restoreObject(req.api, req.params.id));
+}));
+
+router.post('/query', wrap(async (req, res) => {
+  const q = req.body || {};
+  const result = await queryApi(req.api.api_id, q);
+  return ok(res, result);
+}));
+
+router.post('/query/count', wrap(async (req, res) => {
+  const q = { ...(req.body || {}), limit: 10000 };
+  const result = await queryApi(req.api.api_id, q);
+  return ok(res, { count: result.items.length, scanned: result.scanned });
+}));
+
+router.get('/objects/count', wrap(async (req, res) => {
+  const result = await queryApi(req.api.api_id, { collection: req.query.collection, limit: 10000 });
+  return ok(res, { count: result.items.length });
 }));
 
 router.put('/objects/:id', rateLimit('upload'), upload.single('file'), wrap(async (req, res) => {

@@ -2,7 +2,8 @@ const config = require('../config');
 const git = require('../github/client');
 const engine = require('../db/engine');
 const { objectDataPath } = require('../storage/paths');
-const { objectId, nowIso, txId } = require('../utils/ids');
+const { objectId, nowIso, txId, sanitizeCollection } = require('../utils/ids');
+const { trashMetaPath } = require('../storage/paths');
 const { sha256 } = require('../utils/hash');
 
 function mimeOf(name, fallback) {
@@ -21,7 +22,7 @@ function storedName(filename) {
   return safe || 'file.bin';
 }
 
-async function insertObject(api, { filename, buffer, mime_type, idempotencyKey }) {
+async function insertObject(api, { filename, buffer, mime_type, idempotencyKey, collection, tags, custom_metadata }) {
   if (!buffer || !buffer.length) {
     const e = new Error('Empty body');
     e.status = 422; e.code = 'INVALID_REQUEST';
@@ -53,8 +54,9 @@ async function insertObject(api, { filename, buffer, mime_type, idempotencyKey }
 
   const oid = objectId();
   const route = engine.chooseRepo(oid);
-  const name = storedName(filename);
-  const dataPath = objectDataPath(api.api_id, oid, name);
+  const col = sanitizeCollection(collection);
+  const name = 'content';
+  const dataPath = objectDataPath(api.api_id, oid, name, col);
   const hash = sha256(buffer);
   const tx = {
     tx_id: txId(),
@@ -70,11 +72,16 @@ async function insertObject(api, { filename, buffer, mime_type, idempotencyKey }
     api_id: api.api_id,
     repository_id: route.repository_id,
     path: dataPath,
-    filename: filename || name,
+    collection: col,
+    filename: filename || 'file.bin',
     stored_name: name,
     mime_type: mimeOf(filename, mime_type),
     size: buffer.length,
     sha256: hash,
+    content_revision: 1,
+    metadata_revision: 1,
+    tags: Array.isArray(tags) ? tags : [],
+    custom_metadata: custom_metadata && typeof custom_metadata === 'object' ? custom_metadata : {},
     status: 'creating',
     created_at: nowIso(),
     updated_at: nowIso(),
@@ -181,19 +188,75 @@ async function renameObject(api, oid, newFilename) {
   return obj;
 }
 
+async function patchMetadata(api, oid, patch) {
+  const obj = await engine.getObject(oid);
+  engine.assertOwner(api, obj);
+  if (patch.filename) obj.filename = String(patch.filename);
+  if (Array.isArray(patch.tags)) obj.tags = patch.tags.map(String).slice(0, 32);
+  if (patch.custom_metadata && typeof patch.custom_metadata === 'object') {
+    obj.custom_metadata = { ...(obj.custom_metadata || {}), ...patch.custom_metadata };
+  }
+  obj.metadata_revision = (obj.metadata_revision || 1) + 1;
+  obj.updated_at = nowIso();
+  await engine.writeDb(`patch meta ${oid}`, [
+    { path: engine.paths.objectMetaPath(oid), contentUtf8: JSON.stringify(obj, null, 2) },
+  ]);
+  engine.cache.objects.set(oid, obj);
+  return obj;
+}
+
+async function trashObject(api, oid) {
+  const obj = await engine.getObject(oid);
+  engine.assertOwner(api, obj);
+  obj.status = 'trash';
+  obj.deleted_at = nowIso();
+  obj.updated_at = nowIso();
+  const ids = (await engine.listObjectIdsForApi(obj.api_id)).filter((x) => x !== oid);
+  const indexChange = await engine.setApiIndex(obj.api_id, ids);
+  await engine.writeDb(`trash ${oid}`, [
+    { path: engine.paths.objectMetaPath(oid), contentUtf8: JSON.stringify(obj, null, 2) },
+    { path: trashMetaPath(obj.api_id, oid), contentUtf8: JSON.stringify(obj, null, 2) },
+    indexChange,
+  ]);
+  engine.cache.objects.set(oid, obj);
+  return obj;
+}
+
+async function restoreObject(api, oid) {
+  const obj = await engine.getObject(oid);
+  if (!obj) {
+    const e = new Error('OBJECT_NOT_FOUND');
+    e.status = 404; e.code = 'OBJECT_NOT_FOUND';
+    throw e;
+  }
+  engine.assertOwner(api, obj);
+  obj.status = 'active';
+  delete obj.deleted_at;
+  obj.updated_at = nowIso();
+  const ids = await engine.listObjectIdsForApi(obj.api_id);
+  const next = ids.includes(oid) ? ids : ids.concat(oid);
+  const indexChange = await engine.setApiIndex(obj.api_id, next);
+  await engine.writeDb(`restore ${oid}`, [
+    { path: engine.paths.objectMetaPath(oid), contentUtf8: JSON.stringify(obj, null, 2) },
+    indexChange,
+  ]);
+  engine.cache.objects.set(oid, obj);
+  return obj;
+}
+
 async function deleteObject(api, oid) {
+  return trashObject(api, oid);
+}
+
+async function purgeObject(api, oid) {
   const obj = await engine.getObject(oid);
   engine.assertOwner(api, obj);
   const route = engine.repoById(obj.repository_id);
   try {
-    await git.commitFiles(route.repo, `delete ${oid}`, [
+    await git.commitFiles(route.repo, `purge ${oid}`, [
       { path: obj.path, delete: true },
     ]);
-  } catch (err) {
-    if (!String(err.message).includes('404')) {
-      // continue to logical delete even if file already gone
-    }
-  }
+  } catch (err) { /* file may already be gone */ }
   obj.status = 'deleted';
   obj.updated_at = nowIso();
   const ids = (await engine.listObjectIdsForApi(obj.api_id)).filter((x) => x !== oid);
@@ -245,6 +308,10 @@ module.exports = {
   rewriteObject,
   renameObject,
   deleteObject,
+  trashObject,
+  restoreObject,
+  purgeObject,
+  patchMetadata,
   downloadObject,
   verifyObject,
   mimeOf,
