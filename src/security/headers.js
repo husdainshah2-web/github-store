@@ -4,7 +4,11 @@ function securityHeaders(req, res, next) {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-XSS-Protection', '0');
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; img-src 'self' data:; connect-src 'self'");
-  res.setHeader('Cache-Control', 'no-store');
+  if (req.path.startsWith('/admin/api') || req.path.startsWith('/v1')) {
+    res.setHeader('Cache-Control', 'no-store');
+  } else if (/\.(js|css|png|svg|ico)$/.test(req.path)) {
+    res.setHeader('Cache-Control', 'public, max-age=300');
+  }
   next();
 }
 

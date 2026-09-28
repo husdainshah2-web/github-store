@@ -34,9 +34,18 @@ async function getApi(id) {
   return rec;
 }
 
+let apisIndexCache = { at: 0, ids: null };
+
 async function listApis() {
-  const idx = await readJson('indexes/apis.json');
-  const ids = (idx && idx.ids) || [];
+  const now = Date.now();
+  let ids;
+  if (apisIndexCache.ids && now - apisIndexCache.at < 15000) {
+    ids = apisIndexCache.ids;
+  } else {
+    const idx = await readJson('indexes/apis.json');
+    ids = (idx && idx.ids) || [];
+    apisIndexCache = { at: now, ids };
+  }
   const out = [];
   for (const id of ids) {
     const a = await getApi(id);
@@ -82,6 +91,7 @@ async function createApi(name) {
     { path: 'indexes/apis.json', contentUtf8: JSON.stringify(idx, null, 2) },
   ]);
   cache.apis.set(id, rec);
+  apisIndexCache = { at: 0, ids: null };
   return { api: rec, raw_key: raw };
 }
 
@@ -119,6 +129,7 @@ async function deleteApi(id) {
     { path: 'indexes/apis.json', contentUtf8: JSON.stringify(idx, null, 2) },
   ]);
   cache.apis.delete(id);
+  apisIndexCache = { at: 0, ids: null };
   return { deleted: true, api_id: id };
 }
 

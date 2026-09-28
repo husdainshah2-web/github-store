@@ -22,32 +22,22 @@ router.post('/login', wrap(async (req, res) => {
 router.use(adminAuth);
 
 router.get('/overview', wrap(async (req, res) => {
+  const repoCache = require('../monitoring/repoCache');
   const apis = await engine.listApis();
   let objects = 0;
   for (const a of apis) objects += a.object_count || 0;
-  const repos = [];
-  for (const name of [config.databaseRepo, ...config.dataRepos]) {
-    try {
-      const info = await git.getRepo(name);
-      const commits = await git.listCommits(name, 1);
-      repos.push({
-        name,
-        private: info.private,
-        size_kb: info.size,
-        last_commit: commits[0] && commits[0].commit && commits[0].commit.committer && commits[0].commit.committer.date,
-        url: info.html_url,
-        role: name === config.databaseRepo ? 'database' : 'data',
-      });
-    } catch (err) {
-      repos.push({ name, error: err.message, role: name === config.databaseRepo ? 'database' : 'data' });
-    }
-  }
+  const force = req.query.refresh === '1';
+  const repos = force || req.query.full === '1'
+    ? await repoCache.getRepos(force)
+    : (repoCache.cache.repos.length ? repoCache.cache.repos : repoCache.liteRepos());
+  if (!repoCache.cache.repos.length) repoCache.getRepos(false).catch(() => {});
   return ok(res, {
     apis: apis.length,
     objects,
     data_repos: config.dataRepos.length,
-    database_repo: config.databaseRepo,
+    database_repo: `${config.owner}/${config.databaseRepo}`,
     repos,
+    cached: !force,
   });
 }));
 

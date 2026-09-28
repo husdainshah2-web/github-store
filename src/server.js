@@ -16,7 +16,7 @@ app.use(securityHeaders);
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '5m', etag: true }));
 
 const startedAt = Date.now();
 let ready = false;
