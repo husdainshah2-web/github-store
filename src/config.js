@@ -11,15 +11,26 @@ const dataRepos = (process.env.GITHUB_DATA_REPOS || '')
   .map((s) => s.trim())
   .filter(Boolean);
 
+const accountTokens = {};
+(process.env.GITHUB_ACCOUNT_TOKENS || '').split(',').forEach((pair) => {
+  const idx = pair.indexOf(':');
+  if (idx <= 0) return;
+  const owner = pair.slice(0, idx).trim();
+  const token = pair.slice(idx + 1).trim();
+  if (owner && token) accountTokens[owner] = token;
+});
+
 module.exports = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   githubToken: process.env.GITHUB_TOKEN || '',
+  accountTokens,
   owner: process.env.GITHUB_OWNER || 'husdainshah2-web',
   databaseRepo: process.env.GITHUB_DATABASE_REPO || 'ghs-database',
   dataRepos: dataRepos.length ? dataRepos : [
-    'ghs-data-01','ghs-data-02','ghs-data-03','ghs-data-04','ghs-data-05',
-    'ghs-data-06','ghs-data-07','ghs-data-08','ghs-data-09',
+    'husdainshah2-web/ghs-data-01','husdainshah2-web/ghs-data-02','husdainshah2-web/ghs-data-03',
+    'husdainshah2-web/ghs-data-04','husdainshah2-web/ghs-data-05','husdainshah2-web/ghs-data-06',
+    'husdainshah2-web/ghs-data-07','husdainshah2-web/ghs-data-08','husdainshah2-web/ghs-data-09',
   ],
   adminUser: process.env.ADMIN_USERNAME || 'admin',
   adminPassword: process.env.ADMIN_PASSWORD || 'admin123',

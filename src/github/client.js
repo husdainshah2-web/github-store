@@ -11,10 +11,24 @@ class GitHubError extends Error {
   }
 }
 
+function parseRepo(repo) {
+  if (!repo) return { owner: config.owner, name: config.databaseRepo, full: `${config.owner}/${config.databaseRepo}` };
+  if (String(repo).includes('/')) {
+    const [owner, name] = String(repo).split('/');
+    return { owner, name, full: `${owner}/${name}` };
+  }
+  return { owner: config.owner, name: repo, full: `${config.owner}/${repo}` };
+}
+
+function tokenFor(owner) {
+  return config.accountTokens[owner] || config.githubToken;
+}
+
 async function gh(method, path, body, extra = {}) {
   const url = path.startsWith('http') ? path : BASE + path;
+  const token = extra.token || config.githubToken;
   const headers = {
-    Authorization: `Bearer ${config.githubToken}`,
+    Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'github-store-engine',
@@ -49,30 +63,36 @@ async function gh(method, path, body, extra = {}) {
 }
 
 function repoPath(repo) {
-  return `/repos/${config.owner}/${repo}`;
+  const p = parseRepo(repo);
+  return `/repos/${p.full}`;
+}
+
+function repoOpts(repo) {
+  const p = parseRepo(repo);
+  return { token: tokenFor(p.owner) };
 }
 
 async function getRef(repo, branch = config.branch) {
-  return gh('GET', `${repoPath(repo)}/git/ref/heads/${branch}`);
+  return gh('GET', `${repoPath(repo)}/git/ref/heads/${branch}`, undefined, repoOpts(repo));
 }
 
 async function getCommit(repo, sha) {
-  return gh('GET', `${repoPath(repo)}/git/commits/${sha}`);
+  return gh('GET', `${repoPath(repo)}/git/commits/${sha}`, undefined, repoOpts(repo));
 }
 
 async function getTree(repo, sha, recursive = false) {
   const q = recursive ? '?recursive=1' : '';
-  return gh('GET', `${repoPath(repo)}/git/trees/${sha}${q}`);
+  return gh('GET', `${repoPath(repo)}/git/trees/${sha}${q}`, undefined, repoOpts(repo));
 }
 
 async function createBlob(repo, content, encoding = 'utf-8') {
-  return gh('POST', `${repoPath(repo)}/git/blobs`, { content, encoding });
+  return gh('POST', `${repoPath(repo)}/git/blobs`, { content, encoding }, repoOpts(repo));
 }
 
 async function createTree(repo, tree, baseTree) {
   const payload = { tree };
   if (baseTree) payload.base_tree = baseTree;
-  return gh('POST', `${repoPath(repo)}/git/trees`, payload);
+  return gh('POST', `${repoPath(repo)}/git/trees`, payload, repoOpts(repo));
 }
 
 async function createCommit(repo, message, treeSha, parents) {
@@ -80,7 +100,7 @@ async function createCommit(repo, message, treeSha, parents) {
     message,
     tree: treeSha,
     parents,
-  });
+  }, repoOpts(repo));
 }
 
 async function updateRef(repo, sha, expectedSha, branch = config.branch) {
@@ -88,7 +108,7 @@ async function updateRef(repo, sha, expectedSha, branch = config.branch) {
     return await gh('PATCH', `${repoPath(repo)}/git/refs/heads/${branch}`, {
       sha,
       force: false,
-    });
+    }, repoOpts(repo));
   } catch (err) {
     if (err.status === 422 || err.status === 409) {
       const e = new Error('REF_CONFLICT');
@@ -101,15 +121,15 @@ async function updateRef(repo, sha, expectedSha, branch = config.branch) {
 }
 
 async function getBlob(repo, sha) {
-  return gh('GET', `${repoPath(repo)}/git/blobs/${sha}`);
+  return gh('GET', `${repoPath(repo)}/git/blobs/${sha}`, undefined, repoOpts(repo));
 }
 
 async function getRepo(repo) {
-  return gh('GET', repoPath(repo));
+  return gh('GET', repoPath(repo), undefined, repoOpts(repo));
 }
 
 async function listCommits(repo, perPage = 1) {
-  return gh('GET', `${repoPath(repo)}/commits?per_page=${perPage}`);
+  return gh('GET', `${repoPath(repo)}/commits?per_page=${perPage}`, undefined, repoOpts(repo));
 }
 
 /**
@@ -160,7 +180,7 @@ async function commitFiles(repo, message, changes, attempt = 0) {
 
 async function readFileUtf8(repo, path) {
   try {
-    const data = await gh('GET', `${repoPath(repo)}/contents/${encodeURI(path)}?ref=${config.branch}`);
+    const data = await gh('GET', `${repoPath(repo)}/contents/${encodeURI(path)}?ref=${config.branch}`, undefined, repoOpts(repo));
     if (Array.isArray(data)) return null;
     const buf = Buffer.from(data.content.replace(/\n/g, ''), 'base64');
     return { text: buf.toString('utf8'), sha: data.sha, size: data.size };
@@ -172,7 +192,7 @@ async function readFileUtf8(repo, path) {
 
 async function readFileBinary(repo, path) {
   try {
-    const data = await gh('GET', `${repoPath(repo)}/contents/${encodeURI(path)}?ref=${config.branch}`);
+    const data = await gh('GET', `${repoPath(repo)}/contents/${encodeURI(path)}?ref=${config.branch}`, undefined, repoOpts(repo));
     if (Array.isArray(data)) return null;
     const buf = Buffer.from(data.content.replace(/\n/g, ''), 'base64');
     return { buffer: buf, sha: data.sha, size: data.size };
