@@ -3,39 +3,72 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GitHub Store Admin</title>
+  <title>GitDB Control Center</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/styles.css" />
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <div id="login" class="min-h-screen flex items-center justify-center p-6">
-    <form id="login-form" class="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-      <h1 class="text-xl font-bold">GitHub Store</h1>
-      <p class="text-sm text-slate-400">Admin dashboard — 10th repo is the database</p>
-      <input id="user" class="w-full px-3 py-2 rounded-lg bg-slate-800" placeholder="username" />
-      <input id="pass" type="password" class="w-full px-3 py-2 rounded-lg bg-slate-800" placeholder="password" />
-      <p id="login-err" class="text-red-400 text-sm hidden"></p>
-      <button class="w-full py-2 rounded-lg bg-emerald-600 font-medium">Sign in</button>
-    </form>
+<body class="bg-[#07080b] text-slate-200 antialiased">
+  <div id="login-screen" class="min-h-screen grid place-items-center px-4">
+    <div class="w-full max-w-md bg-[#0c0e13] border border-white/10 rounded-2xl p-8">
+      <div class="flex items-center gap-3 mb-6">
+        <div class="w-10 h-10 rounded-xl bg-teal-500/15 border border-teal-500/30 grid place-items-center text-teal-300 font-bold">G</div>
+        <div>
+          <div class="text-lg font-semibold">GitDB Control Center</div>
+          <div class="text-xs text-slate-500">Git-native database infrastructure</div>
+        </div>
+      </div>
+      <form id="login-form" class="space-y-3">
+        <input id="user" class="w-full bg-[#12151c] border border-white/10 rounded-lg px-3 py-2.5 text-sm" placeholder="Admin username" />
+        <input id="pass" type="password" class="w-full bg-[#12151c] border border-white/10 rounded-lg px-3 py-2.5 text-sm" placeholder="Password" />
+        <p id="login-err" class="hidden text-sm text-red-400"></p>
+        <button class="w-full bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-lg py-2.5">Sign in</button>
+      </form>
+    </div>
   </div>
 
-  <div id="app" class="hidden min-h-screen flex">
-    <aside class="w-56 bg-slate-900 border-r border-slate-800 p-4 space-y-2">
-      <div class="font-bold mb-4">GitHub Store</div>
-      <button data-page="overview" class="nav w-full text-left px-3 py-2 rounded-lg bg-slate-800">Overview</button>
-      <button data-page="apis" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">APIs</button>
-      <button data-page="objects" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">Objects</button>
-      <button data-page="repos" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">Repositories</button>
-      <button data-page="database" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">Database</button>
-      <button data-page="doctor" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">System Doctor</button>
-      <button data-page="playground" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">API Playground</button>
-      <button data-page="console" class="nav w-full text-left px-3 py-2 rounded-lg text-slate-400">DB Console</button>
-      <button id="logout" class="w-full text-left px-3 py-2 rounded-lg text-slate-500 mt-8">Logout</button>
-    </aside>
-    <main class="flex-1 p-6">
-      <h2 id="title" class="text-2xl font-semibold mb-4">Overview</h2>
-      <div id="content">Loading…</div>
-    </main>
+  <div id="app-shell" class="hidden min-h-screen">
+    <header class="sticky top-0 z-30 h-14 border-b border-white/10 bg-[#0c0e13]/90 backdrop-blur flex items-center px-4 gap-3">
+      <button id="sidebar-toggle" class="lg:hidden text-slate-400">Menu</button>
+      <div class="hidden md:flex items-center gap-3 text-[11px] tracking-wide">
+        <span class="status-dot" id="dot-server">SERVER</span>
+        <span class="status-dot" id="dot-github">GITHUB</span>
+        <span class="status-dot" id="dot-db">DATABASE</span>
+        <span class="status-dot" id="dot-worker">WORKER</span>
+      </div>
+      <button id="open-search" class="flex-1 max-w-xl text-left text-sm text-slate-500 bg-[#12151c] border border-white/10 rounded-lg px-3 py-1.5">Search or command <span class="float-right text-[11px] text-slate-600">Ctrl K</span></button>
+      <select id="write-mode" class="bg-[#12151c] border border-white/10 rounded-lg text-xs px-2 py-1.5">
+        <option value="NORMAL">NORMAL</option>
+        <option value="READ_ONLY">READ ONLY</option>
+        <option value="LOCKED">EMERGENCY LOCK</option>
+      </select>
+    </header>
+    <div class="flex">
+      <aside id="sidebar" class="hidden lg:block sticky top-14 w-60 h-[calc(100vh-56px)] bg-[#0c0e13] border-r border-white/10 overflow-y-auto p-3">
+        <div class="px-2 py-2 font-semibold">GitDB</div>
+        <nav id="nav" class="text-sm"></nav>
+        <div class="mt-8 px-2 text-[11px] text-slate-500">GitHubOnlyDB 1.2.0 · format v1</div>
+      </aside>
+      <main class="flex-1 min-w-0 p-4 md:p-6">
+        <div class="flex items-end justify-between gap-4 mb-5">
+          <div>
+            <h1 id="page-title" class="text-xl font-semibold">Overview</h1>
+            <p id="page-sub" class="text-sm text-slate-500">Database control center</p>
+          </div>
+          <div id="quick-actions" class="flex flex-wrap gap-2"></div>
+        </div>
+        <div id="lock-banner" class="hidden mb-4 border border-red-500/30 bg-red-500/10 text-red-200 rounded-xl px-4 py-3 text-sm">ALL WRITES LOCKED — reads still work</div>
+        <div id="content"></div>
+      </main>
+    </div>
   </div>
+
+  <div id="palette" class="hidden fixed inset-0 z-50 bg-black/50 p-4">
+    <div class="max-w-xl mx-auto mt-24 bg-[#0c0e13] border border-white/10 rounded-2xl overflow-hidden">
+      <input id="palette-input" class="w-full bg-transparent px-4 py-3 text-sm outline-none" placeholder="Type a command" />
+      <div id="palette-list" class="max-h-72 overflow-auto border-t border-white/10"></div>
+    </div>
+  </div>
+  <div id="toast" class="fixed bottom-4 right-4 space-y-2 z-50"></div>
   <script src="/app.js"></script>
 </body>
 </html>

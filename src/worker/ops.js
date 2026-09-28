@@ -172,7 +172,7 @@ async function renameObject(api, oid, newFilename) {
     e.status = 500; e.code = 'INCONSISTENT';
     throw e;
   }
-  const newPath = objectDataPath(obj.api_id, oid, name);
+  const newPath = objectDataPath(obj.api_id, oid, storedName(newFilename), obj.collection || 'default');
   await git.commitFiles(route.repo, `rename ${oid}`, [
     { path: newPath, contentBase64: file.buffer.toString('base64') },
     { path: obj.path, delete: true },

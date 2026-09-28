@@ -60,6 +60,11 @@ router.post('/objects', rateLimit('upload'), upload.single('file'), wrap(async (
   return ok(res, { object_id: result.object_id, status: result.status, tx_id: result.tx_id }, 201);
 }));
 
+router.get('/objects/count', wrap(async (req, res) => {
+  const result = await queryApi(req.api.api_id, { collection: req.query.collection, limit: 10000 });
+  return ok(res, { count: result.items.length });
+}));
+
 router.get('/objects', wrap(async (req, res) => {
   const ids = await engine.listObjectIdsForApi(req.api.api_id);
   const page = Math.max(1, parseInt(req.query.page || '1', 10));
@@ -128,11 +133,6 @@ router.post('/query/count', wrap(async (req, res) => {
   const q = { ...(req.body || {}), limit: 10000 };
   const result = await queryApi(req.api.api_id, q);
   return ok(res, { count: result.items.length, scanned: result.scanned });
-}));
-
-router.get('/objects/count', wrap(async (req, res) => {
-  const result = await queryApi(req.api.api_id, { collection: req.query.collection, limit: 10000 });
-  return ok(res, { count: result.items.length });
 }));
 
 router.put('/objects/:id', rateLimit('upload'), upload.single('file'), wrap(async (req, res) => {

@@ -1,0 +1,11 @@
+
+.status-dot{display:inline-flex;align-items:center;gap:.35rem;color:#94a3b8}
+.status-dot:before{content:"";width:.45rem;height:.45rem;border-radius:99px;background:#2dd4bf;box-shadow:0 0 0 3px rgba(45,212,191,.12)}
+.status-dot.warn:before{background:#f59e0b}
+.status-dot.bad:before{background:#ef4444}
+.nav-btn{display:block;width:100%;text-align:left;padding:.45rem .65rem;border-radius:.55rem;color:#94a3b8}
+.nav-btn:hover{background:#1a1f2a;color:#e2e8f0}
+.nav-btn.active{background:rgba(45,212,191,.1);color:#99f6e4}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.card{background:#0c0e13;border:1px solid rgba(255,255,255,.08);border-radius:1rem}
+.k{font-size:11px;color:#64748b;letter-spacing:.04em;text-transform:uppercase}

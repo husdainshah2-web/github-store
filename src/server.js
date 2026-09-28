@@ -21,6 +21,19 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 const startedAt = Date.now();
 let ready = false;
 
+app.get('/version', (req, res) => {
+  res.json({ engine: 'GitHubOnlyDB', version: '1.2.0', format_version: 1, brand: 'GitDB' });
+});
+
+app.get('/metrics', (req, res) => {
+  res.json({
+    uptime_s: Math.floor((Date.now() - startedAt) / 1000),
+    github_rate: limits.snapshot(),
+    ready,
+    write_mode: require('./security/mode').state.writeMode,
+  });
+});
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
