@@ -5,10 +5,13 @@ const ops = require('./ops');
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function expired(obj) {
-  const at = obj.deleted_at || obj.updated_at;
+  const days = config.recycleDays || 15;
+  const limit = days * DAY_MS;
+  const exp = obj.expires_at ? new Date(obj.expires_at).getTime() : NaN;
+  if (!Number.isNaN(exp)) return Date.now() > exp;
+  const at = obj.created_at || obj.updated_at || obj.deleted_at;
   if (!at) return false;
-  const age = Date.now() - new Date(at).getTime();
-  return age > config.recycleDays * DAY_MS;
+  return Date.now() - new Date(at).getTime() > limit;
 }
 
 async function sweepTrash() {
@@ -16,16 +19,19 @@ async function sweepTrash() {
   const report = { checked: 0, purged: 0, kept: 0, errors: [] };
   for (const a of apis) {
     const ids = await engine.listObjectIdsForApi(a.api_id);
-    // also scan known cache objects marked trash
     for (const id of ids) {
       const obj = await engine.getObject(id);
       if (!obj) continue;
       report.checked += 1;
-      if (obj.status !== 'trash' && obj.status !== 'deleted') continue;
-      if (!expired(obj)) {
+      if (!expired(obj) && obj.status !== 'deleted') {
         report.kept += 1;
         continue;
       }
+      if (!expired(obj) && (obj.status === 'trash' || obj.status === 'deleted')) {
+        report.kept += 1;
+        continue;
+      }
+      if (!expired(obj)) { report.kept += 1; continue; }
       try {
         await ops.purgeObject({ api_id: 'admin', role: 'admin' }, obj.object_id);
         report.purged += 1;
@@ -41,9 +47,9 @@ function startRecycleWorker() {
   const tick = async () => {
     try {
       const r = await sweepTrash();
-      if (r.purged) console.log('Recycle sweep', r);
+      if (r.purged) console.log('TTL sweep', r);
     } catch (err) {
-      console.error('Recycle sweep failed:', err.message);
+      console.error('TTL sweep failed:', err.message);
     }
   };
   setTimeout(tick, 20 * 1000);

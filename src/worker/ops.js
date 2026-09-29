@@ -85,6 +85,7 @@ async function insertObject(api, { filename, buffer, mime_type, idempotencyKey, 
     status: 'creating',
     created_at: nowIso(),
     updated_at: nowIso(),
+    expires_at: new Date(Date.now() + (config.recycleDays || 15) * 24 * 60 * 60 * 1000).toISOString(),
   };
 
   await git.commitFiles(route.repo, `insert ${oid}`, [

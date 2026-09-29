@@ -161,3 +161,35 @@ router.get('/objects/:id/verify', wrap(async (req, res) => {
 }));
 
 module.exports = router;
+
+
+// Firebase-like collection/document API. Same GitHub storage. 15-day TTL.
+router.post('/data/:collection', rateLimit('upload'), wrap(async (req, res) => {
+  const collection = req.params.collection;
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const file = {
+    filename: (body.id || body.doc_id || 'doc') + '.json',
+    buffer: Buffer.from(JSON.stringify(body), 'utf8'),
+    mime_type: 'application/json',
+    collection,
+    custom_metadata: { firebase: true, doc_id: body.id || body.doc_id || null },
+  };
+  const result = await ops.insertObject(req.api, file);
+  return ok(res, { id: result.object_id, collection, status: result.status }, 201);
+}));
+
+router.get('/data/:collection', wrap(async (req, res) => {
+  const result = await queryApi(req.api.api_id, { collection: req.params.collection, limit: parseInt(req.query.limit || '50', 10) });
+  return ok(res, { collection: req.params.collection, items: result.items || result });
+}));
+
+router.get('/data/:collection/:id', wrap(async (req, res) => {
+  const obj = await engine.getObject(req.params.id);
+  if (!obj || obj.api_id !== req.api.api_id) return fail(res, 404, 'NOT_FOUND', 'Document not found');
+  if (obj.collection && obj.collection !== req.params.collection) return fail(res, 404, 'NOT_FOUND', 'Document not found');
+  return ok(res, obj);
+}));
+
+router.delete('/data/:collection/:id', wrap(async (req, res) => {
+  return ok(res, await ops.deleteObject(req.api, req.params.id));
+}));

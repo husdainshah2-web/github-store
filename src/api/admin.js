@@ -123,10 +123,7 @@ router.delete('/objects/:id', wrap(async (req, res) => {
 
 router.post('/rebuild-index', wrap(async (req, res) => ok(res, await engine.rebuildIndex())));
 
-router.post('/backup', wrap(async (req, res) => {
-  const { createLatestBackup } = require('../worker/backup');
-  return ok(res, await createLatestBackup(), 201);
-}));
+router.post('/backup', (req, res) => fail(res, 410, 'BACKUP_DISABLED', 'Backup is disabled. Objects live 15 days then purge.'));
 
 router.post('/recycle/sweep', wrap(async (req, res) => {
   const { sweepTrash } = require('../worker/recycle');
@@ -139,8 +136,9 @@ router.get('/policy', wrap(async (req, res) => ok(res, {
   data_repos: config.dataRepos.length,
   recycle_days: config.recycleDays,
   max_file_size: config.maxFileSize,
-  backup_path: config.backupPath,
-  backup_policy: 'overwrite-only',
+  backup_path: null,
+  backup_policy: 'disabled',
+  ttl_days: config.recycleDays,
 })));
 
 router.get('/objects/:id/verify', wrap(async (req, res) => ok(res, await ops.verifyObject(req.params.id))));
@@ -162,7 +160,7 @@ router.post('/mode', wrap(async (req, res) => {
   return ok(res, { write_mode: next });
 }));
 
-router.post('/snapshots', wrap(async (req, res) => {
+router.post('/snapshots-disabled-placeholder', wrap(async (req, res) => {
   const heads = {};
   for (const name of [config.databaseRepo, ...config.dataRepos]) {
     const ref = await git.getRef(name);
