@@ -160,22 +160,7 @@ router.post('/mode', wrap(async (req, res) => {
   return ok(res, { write_mode: next });
 }));
 
-router.post('/snapshots-disabled-placeholder', wrap(async (req, res) => {
-  const heads = {};
-  for (const name of [config.databaseRepo, ...config.dataRepos]) {
-    const ref = await git.getRef(name);
-    heads[name] = ref.object.sha;
-  }
-  const snap = {
-    snapshot_id: 'snap_' + Date.now().toString(36),
-    created_at: new Date().toISOString(),
-    heads,
-  };
-  await engine.writeDb('snapshot ' + snap.snapshot_id, [
-    { path: `snapshots/${snap.snapshot_id}.json`, contentUtf8: JSON.stringify(snap, null, 2) },
-  ]);
-  return ok(res, snap, 201);
-}));
+router.post('/snapshots', (req, res) => fail(res, 410, 'HISTORY_DISABLED', 'No snapshot history. Data expires in 15 days.'));
 
 router.get('/doctor', wrap(async (req, res) => {
   const repoCache = require('../monitoring/repoCache');
