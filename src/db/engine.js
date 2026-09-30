@@ -53,6 +53,7 @@ async function listApis() {
       const copy = { ...a };
       delete copy.key_hash;
       delete copy.key_enc;
+      delete copy.password_hash;
       out.push(copy);
     }
   }
@@ -80,7 +81,20 @@ async function findApiByKey(rawKey) {
   return again && again.status === 'active' ? again : null;
 }
 
-async function createApi(name) {
+async function createApi(name, creds = {}) {
+  const username = String(creds.username || '').trim();
+  const password = String(creds.password || '');
+  if (!username || username.length < 3) {
+    const e = new Error('username required (min 3)');
+    e.status = 422; e.code = 'INVALID_REQUEST';
+    throw e;
+  }
+  if (password.length < 8) {
+    const e = new Error('password required (min 8)');
+    e.status = 422; e.code = 'INVALID_REQUEST';
+    throw e;
+  }
+  const bcrypt = require('bcryptjs');
   const id = apiId();
   const raw = apiKey();
   const rec = {
@@ -89,6 +103,8 @@ async function createApi(name) {
     status: 'active',
     key_hash: hashKey(raw),
     key_enc: encryptSecret(raw),
+    operator_username: username,
+    password_hash: bcrypt.hashSync(password, 10),
     created_at: nowIso(),
     updated_at: nowIso(),
     object_count: 0,
@@ -231,11 +247,36 @@ async function rebuildIndex() {
   return { apis: idx.ids.length, indexes: Object.keys(byApi).length };
 }
 
+async function loginApi(name, username, password) {
+  const bcrypt = require('bcryptjs');
+  const { safeEqual } = require('../security/harden');
+  const list = await listApis();
+  const wantName = String(name || '').trim().toLowerCase();
+  const wantUser = String(username || '').trim();
+  const api = list.find((a) => String(a.name || '').trim().toLowerCase() === wantName)
+    || list.find((a) => a.api_id === String(name || '').trim());
+  const full = api ? await getApi(api.api_id) : null;
+  if (!full || full.status !== 'active' || !full.password_hash) {
+    const e = new Error('Invalid credentials');
+    e.status = 401; e.code = 'UNAUTHORIZED';
+    throw e;
+  }
+  const userOk = safeEqual(String(full.operator_username || ''), wantUser);
+  const passOk = bcrypt.compareSync(String(password || ''), full.password_hash);
+  if (!userOk || !passOk) {
+    const e = new Error('Invalid credentials');
+    e.status = 401; e.code = 'UNAUTHORIZED';
+    throw e;
+  }
+  return full;
+}
+
 module.exports = {
   cache,
   getApi,
   listApis,
   findApiByKey,
+  loginApi,
   rebuildKeyMap,
   createApi,
   updateApi,

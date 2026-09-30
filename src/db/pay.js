@@ -136,10 +136,10 @@ function safeEqual(a, b) {
 
 async function handleWebhook(apiId, rawBuf, headers) {
   const psp = await loadPsp(apiId);
-  if (!psp) err(503, 'PSP_NOT_CONFIGURED', 'Attach webhook_secret via PUT /v1/pay/psp');
+  if (!psp) err(401, 'REJECTED', 'rejected');
   const sig = String(headers['x-gitdb-signature'] || headers['x-webhook-signature'] || '').replace(/^sha256=/, '');
   const expected = hmacHex(psp.webhook_secret, rawBuf);
-  if (!sig || !safeEqual(sig, expected)) err(401, 'WEBHOOK_BAD_SIGNATURE', 'Signature mismatch');
+  if (!sig || !safeEqual(sig, expected)) err(401, 'REJECTED', 'rejected');
   const ts = parseInt(headers['x-gitdb-timestamp'] || headers['x-webhook-timestamp'] || '0', 10);
   if (ts && Math.abs(Date.now() / 1000 - ts) > 300) err(401, 'WEBHOOK_EXPIRED', 'Timestamp window exceeded');
   let body;

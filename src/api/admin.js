@@ -59,7 +59,8 @@ router.get('/apis/:id', wrap(async (req, res) => {
   const safe = { ...rec };
   delete safe.key_hash;
   delete safe.key_enc;
-  return ok(res, { ...safe, api_key });
+  delete safe.password_hash;
+  return ok(res, { ...safe, api_key, has_login: Boolean(rec.password_hash), operator_username: rec.operator_username || null });
 }));
 
 router.delete('/apis/:id', wrap(async (req, res) => {
@@ -71,13 +72,34 @@ router.delete('/apis/:id', wrap(async (req, res) => {
 
 router.post('/apis', wrap(async (req, res) => {
   const name = (req.body && req.body.name) || 'Untitled API';
-  const created = await engine.createApi(name);
+  const created = await engine.createApi(name, {
+    username: req.body && req.body.username,
+    password: req.body && req.body.password,
+  });
+  const safe = { ...created.api };
+  delete safe.key_hash;
+  delete safe.key_enc;
+  delete safe.password_hash;
   await engine.appendAudit({ at: engine.nowIso(), type: 'api_created', api_id: created.api.api_id }).catch(() => {});
   return ok(res, {
-    api: { ...created.api, key_hash: undefined },
+    api: safe,
     api_key: created.raw_key,
-    warning: 'Save this API key now. It will not be shown again.',
+    warning: 'Save key. Clients must POST /v1/login with username/password before data access.',
   }, 201);
+}));
+
+router.post('/apis/:id/password', wrap(async (req, res) => {
+  const bcrypt = require('bcryptjs');
+  const rec = await engine.getApi(req.params.id);
+  if (!rec) return fail(res, 404, 'NOT_FOUND', 'API not found');
+  const username = String((req.body && req.body.username) || rec.operator_username || '').trim();
+  const password = String((req.body && req.body.password) || '');
+  if (username.length < 3 || password.length < 8) return fail(res, 422, 'INVALID_REQUEST', 'username min 3, password min 8');
+  await engine.updateApi(req.params.id, {
+    operator_username: username,
+    password_hash: bcrypt.hashSync(password, 10),
+  });
+  return ok(res, { ok: true, operator_username: username });
 }));
 
 router.post('/apis/:id/disable', wrap(async (req, res) => {

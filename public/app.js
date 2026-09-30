@@ -119,11 +119,21 @@ window.addEventListener('keydown', (e) => {
 });
 document.getElementById('sidebar-toggle').onclick = () => document.getElementById('sidebar').classList.toggle('hidden');
 
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>')
+    .replace(/"/g, '"').replace(/'/g, '&#39;');
+}
+
 async function createApi() {
   const name = prompt('API name');
   if (!name) return;
-  const created = await api('/apis', { method:'POST', body: JSON.stringify({ name }) });
-  alert('Save this API key now:\n' + created.api_key);
+  const username = prompt('API username (clients login with this)');
+  if (!username) return;
+  const password = prompt('API password (min 8 characters)');
+  if (!password || password.length < 8) { toast('Password min 8'); return; }
+  const created = await api('/apis', { method:'POST', body: JSON.stringify({ name, username, password }) });
+  alert('Save this API key now:\n' + created.api_key + '\n\nClients must POST /v1/login with username/password first.');
   go('apis');
 }
 
@@ -154,7 +164,7 @@ async function go(page) {
     if (page === 'reconcile') return el.innerHTML = empty('Run System Doctor, then verify individual objects from the Objects page.');
     if (page === 'settings') return settings(el);
   } catch (ex) {
-    el.innerHTML = `<div class="card p-4 text-red-300">${ex.message}</div>`;
+    el.innerHTML = `<div class="card p-4 text-red-300">${esc(ex.message)}</div>`;
   }
 }
 
@@ -196,7 +206,7 @@ async function apis(el) {
     <div class="card overflow-hidden">
       <table class="w-full text-sm"><thead class="text-slate-500 text-left"><tr><th class="p-3">Name</th><th>ID</th><th>Status</th><th>Objects</th><th></th></tr></thead>
       <tbody>${list.map(a=>`<tr class="border-t border-white/5 openapi" data-id="${a.api_id}" style="cursor:pointer">
-        <td class="p-3">${a.name}</td><td class="mono text-xs">${a.api_id}</td>
+        <td class="p-3">${esc(a.name)}</td><td class="mono text-xs">${esc(a.api_id)}</td>
         <td>${a.status}</td><td>${a.object_count||0}</td>
         <td class="p-3 text-right" onclick="event.stopPropagation()">
           <button data-id="${a.api_id}" data-st="${a.status}" class="tog text-xs px-2 py-1 bg-[#12151c] rounded">Toggle</button>
@@ -237,9 +247,9 @@ async function objects(el) {
   el.innerHTML = items.length ? `<div class="card overflow-auto"><table class="w-full text-sm">
     <thead class="text-slate-500 text-left"><tr><th class="p-3">Object</th><th>File</th><th>API</th><th>Repo</th><th>Size</th><th>Status</th></tr></thead>
     <tbody>${items.map(o=>`<tr class="border-t border-white/5 hover:bg-white/[.03]">
-      <td class="p-3 mono text-xs">${o.object_id}</td><td>${o.filename||''}</td>
-      <td class="mono text-xs">${o.api_id}</td><td class="mono text-xs">${o.repository_id||''}</td>
-      <td>${o.size||0}</td><td>${o.status}</td></tr>`).join('')}</tbody></table></div>` : empty('No objects. Upload through the API playground.');
+      <td class="p-3 mono text-xs">${esc(o.object_id)}</td><td>${esc(o.filename||'')}</td>
+      <td class="mono text-xs">${esc(o.api_id)}</td><td class="mono text-xs">${esc(o.repository_id||'')}</td>
+      <td>${o.size||0}</td><td>${esc(o.status)}</td></tr>`).join('')}</tbody></table></div>` : empty('No objects. Upload through the API playground.');
 }
 
 async function collections(el) {

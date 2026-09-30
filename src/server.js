@@ -55,39 +55,25 @@ const startedAt = Date.now();
 let ready = false;
 
 app.get('/version', (req, res) => {
-  res.json({ engine: 'GitHubOnlyDB', version: '3.0.0', format_version: 4, brand: 'GitDB' });
+  res.json({ engine: 'GitDB', ready: true });
 });
 
 app.get('/metrics', (req, res) => {
-  res.json({
-    uptime_s: Math.floor((Date.now() - startedAt) / 1000),
-    github_rate: limits.snapshot(),
-    ready,
-    write_mode: require('./security/mode').state.writeMode,
-  });
+  res.json({ ready, write_mode: require('./security/mode').state.writeMode });
 });
 
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    engine: 'GitDB',
-    version: '3.0.0', format_version: 4,
-    database: config.databaseRepo,
-    data_repos: config.dataRepos.length,
-    uptime_s: Math.floor((Date.now() - startedAt) / 1000),
-    github_rate: limits.snapshot(),
-    ready,
-  });
+  res.json({ status: ready ? 'ok' : 'starting', ready });
 });
 
 app.get('/ready', (req, res) => {
   if (!ready) return res.status(503).json({ status: 'not_ready' });
-  res.json({ status: 'ready', database: config.databaseRepo });
+  res.json({ status: 'ready' });
 });
 
 app.post('/webhooks/github', express.raw({ type: 'application/json' }), (req, res) => {
   const secret = process.env.GITHUB_WEBHOOK_SECRET;
-  if (!secret) return res.status(401).json({ ok: false, error: 'WEBHOOK_SECRET_REQUIRED' });
+  if (!secret) return res.status(401).json({ ok: false });
   const sig = req.get('X-Hub-Signature-256') || '';
   const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body || ''), 'utf8');
   const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(raw).digest('hex');
@@ -96,8 +82,32 @@ app.post('/webhooks/github', express.raw({ type: 'application/json' }), (req, re
   res.json({ ok: true });
 });
 
-app.use('/v1', publicApi);
 app.use('/admin/api', adminApi);
+
+app.post('/v1/login', express.json({ limit: '16kb' }), async (req, res) => {
+  try {
+    const { touch, clientIp } = require('./security/harden');
+    if (!touch('apilogin:' + clientIp(req), 15 * 60 * 1000, 8)) {
+      return res.status(429).json({ success: false, error: { code: 'RATE_LIMITED', message: 'Too many login attempts' } });
+    }
+    const jwt = require('jsonwebtoken');
+    const api = await engine.loginApi(
+      req.body && (req.body.api_name || req.body.name),
+      req.body && req.body.username,
+      req.body && req.body.password
+    );
+    const token = jwt.sign(
+      { role: 'api-user', api_id: api.api_id, username: api.operator_username },
+      config.jwtSecret,
+      { algorithm: 'HS256', expiresIn: '12h' }
+    );
+    res.json({ success: true, data: { token, api_id: api.api_id, name: api.name, expires_in: '12h' } });
+  } catch (err) {
+    res.status(err.status || 401).json({ success: false, error: { code: err.code || 'UNAUTHORIZED', message: 'Invalid credentials' } });
+  }
+});
+
+app.use('/v1', publicApi);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
