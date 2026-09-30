@@ -165,9 +165,6 @@ router.get('/objects/:id/verify', wrap(async (req, res) => {
   return ok(res, await ops.verifyObject(req.params.id));
 }));
 
-module.exports = router;
-
-
 // Firebase-like collection/document API. Same GitHub storage. 15-day TTL.
 router.post('/data/:collection', rateLimit('upload'), wrap(async (req, res) => {
   await enforce.assertCanWrite(req.api, req);
@@ -372,3 +369,5 @@ router.post('/push/subscribe', wrap(async (req, res) => {
 router.post('/push/send', wrap(async (_req, res) => {
   return fail(res, 501, 'WEB_PUSH_KEYS_NOT_CONFIGURED', 'Device push is not configured. Inbox /v1/notify is the real channel.');
 }));
+
+module.exports = router;

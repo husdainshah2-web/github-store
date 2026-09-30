@@ -3,8 +3,8 @@ const API = '/admin/api';
 let token = localStorage.getItem('adminToken');
 const PAGES = [
   ['overview','Overview'],['explorer','Explorer'],['objects','Objects'],['collections','Collections'],
-  ['query','Query'],['apis','APIs'],['repos','Repositories'],['transactions','Transactions'],
-  ['snapshots','Snapshots'],['recycle','Recycle Bin'],['security','Security'],['audit','Audit'],
+  ['query','Query'],['faces','Faces'],['apis','APIs'],['repos','Repositories'],['transactions','Transactions'],
+  ['recycle','Recycle Bin'],['security','Security'],['audit','Audit'],
   ['performance','Performance'],['console','Console'],['playground','Playground'],
   ['doctor','System Doctor'],['reconcile','Reconciliation'],['settings','Settings']
 ];
@@ -23,7 +23,10 @@ async function api(path, opts = {}) {
   if (token) headers.Authorization = 'Bearer ' + token;
   const res = await fetch(API + path, { ...opts, headers });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.success === false) throw new Error((data.error && data.error.message) || 'Request failed');
+  if (!res.ok || data.success === false) {
+    const msg = (data.error && data.error.message) || data.message || ('HTTP ' + res.status);
+    throw new Error(msg);
+  }
   return data.data;
 }
 
@@ -39,10 +42,8 @@ function showApp() {
   nav.querySelectorAll('.nav-btn').forEach(b => b.onclick = () => go(b.dataset.page));
   document.getElementById('quick-actions').innerHTML = `
     <button id="qa-api" class="text-xs px-3 py-1.5 rounded-lg bg-teal-500 text-black font-semibold">Create API</button>
-    <button id="qa-snap" class="text-xs px-3 py-1.5 rounded-lg bg-[#12151c] border border-white/10">Snapshot</button>
     <button id="qa-doc" class="text-xs px-3 py-1.5 rounded-lg bg-[#12151c] border border-white/10">Doctor</button>`;
   document.getElementById('qa-api').onclick = createApi;
-  document.getElementById('qa-snap').onclick = async () => { toast('Creating snapshot'); await api('/snapshots',{method:'POST'}); toast('Snapshot saved'); };
   document.getElementById('qa-doc').onclick = () => go('doctor');
   document.getElementById('write-mode').onchange = async (e) => {
     await api('/mode', { method:'POST', body: JSON.stringify({ mode: e.target.value }) });
@@ -57,9 +58,9 @@ async function pingHealth() {
   try {
     const h = await fetch('/health').then(r => r.json());
     document.getElementById('dot-server').classList.toggle('bad', false);
-    document.getElementById('dot-github').classList.toggle('warn', h.github_rate && h.github_rate.remaining === 0);
+    document.getElementById('dot-github').classList.toggle('warn', Boolean(h.github_rate && h.github_rate.remaining === 0));
     document.getElementById('dot-db').classList.toggle('bad', !h.database);
-    document.getElementById('dot-worker').classList.toggle('bad', !h.ready);
+    document.getElementById('dot-worker').classList.toggle('bad', h.ready === false);
   } catch (e) {
     document.getElementById('dot-server').classList.add('bad');
   }
@@ -86,7 +87,6 @@ if (token) showApp();
 
 const COMMANDS = PAGES.map(([id,label]) => ({ label: 'Open ' + label, run: () => go(id) })).concat([
   { label: 'Create API', run: createApi },
-  { label: 'Create Snapshot', run: async () => { await api('/snapshots',{method:'POST'}); toast('Snapshot created'); } },
   { label: 'Rebuild Index', run: async () => { await api('/rebuild-index',{method:'POST'}); toast('Indexes rebuilt'); } },
   { label: 'Emergency Lock', run: async () => { await api('/mode',{method:'POST', body: JSON.stringify({mode:'LOCKED'})}); toast('Writes locked'); } }
 ]);
@@ -140,10 +140,10 @@ async function go(page) {
     if (page === 'objects') return objects(el);
     if (page === 'collections') return collections(el);
     if (page === 'query') return queryPage(el);
+    if (page === 'faces') return facesPage(el);
     if (page === 'apis') return apis(el);
     if (page === 'repos') return repos(el);
     if (page === 'transactions') return el.innerHTML = empty('Transactions persist in Repo 10 under transactions/');
-    if (page === 'snapshots') return snapshots(el);
     if (page === 'recycle') return recycle(el);
     if (page === 'security') return security(el);
     if (page === 'audit') return el.innerHTML = empty('Mutation events are batched into Repo 10 audit shards.');
@@ -259,6 +259,28 @@ async function explorer(el) {
     </div></div>`;
 }
 
+async function facesPage(el) {
+  let policy = null;
+  try { policy = await api('/policy'); } catch (e) { policy = { error: e.message }; }
+  el.innerHTML = `<div class="grid md:grid-cols-2 gap-3 mb-4">
+    ${card('Backend', 'GitHub repos only', 'No SQLite / Firebase / Redis')}
+    ${card('TTL', (policy && policy.recycle_days) || 15, 'days then purge')}
+    ${card('Backup', (policy && policy.backup_policy) || 'disabled', 'history off')}
+    ${card('Max file', policy && policy.max_file_size ? Math.round(policy.max_file_size/1024/1024)+' MB' : '90 MB', 'hard cap')}
+  </div>
+  <div class="card p-4 text-sm leading-7">
+    <div class="k mb-2">Real faces (API key on /v1)</div>
+    <div>Docs <span class="mono text-teal-300">/v1/data/:collection</span></div>
+    <div>Schema <span class="mono text-teal-300">/v1/schema/:collection</span></div>
+    <div>KV <span class="mono text-teal-300">/v1/kv/:key</span></div>
+    <div>SQL-lite <span class="mono text-teal-300">POST /v1/sql</span></div>
+    <div>OTP <span class="mono text-teal-300">/v1/auth/otp/start</span> — mail only if SMTP saved</div>
+    <div>Notify <span class="mono text-teal-300">/v1/notify</span></div>
+    <div>Count / explain are GitHub scans, not estimates.</div>
+    <div class="text-slate-500 mt-2">Device push returns 501 until VAPID keys exist.</div>
+  </div>`;
+}
+
 async function queryPage(el) {
   el.innerHTML = `<div class="card p-4 max-w-xl space-y-2">
     <div class="k">Visual query builder — no SQL</div>
@@ -273,7 +295,10 @@ async function queryPage(el) {
     const body = { collection: document.getElementById('q-col').value || undefined, where: [] };
     const field = document.getElementById('q-field').value;
     if (field) body.where.push({ field, op: document.getElementById('q-op').value, value: document.getElementById('q-val').value });
-    document.getElementById('q-out').textContent = 'Query runs on an API key via POST /v1/query. Admin object list preview:\n' + JSON.stringify(await api('/objects'), null, 2);
+    document.getElementById('q-out').textContent = JSON.stringify({
+      note: 'Admin preview of objects. Tenant query is POST /v1/query with an API key — this list is real GitHub metadata.',
+      objects: await api('/objects'),
+    }, null, 2);
   };
 }
 
@@ -284,15 +309,6 @@ async function repos(el) {
     <div class="text-xs text-slate-500 mt-2">${r.size_kb||0} KB · ${r.last_commit||'n/a'}</div>
     ${r.url?`<a class="text-xs text-teal-300" href="${r.url}" target="_blank">Open GitHub</a>`:''}
   </div>`).join('')}</div>`;
-}
-
-async function snapshots(el) {
-  el.innerHTML = `<div class="mb-3"><button id="mk-snap" class="px-3 py-2 bg-teal-500 text-black rounded-lg text-sm font-semibold">Create snapshot</button></div>` + empty('Snapshots store all 10 repository HEAD SHAs in Repo 10.');
-  document.getElementById('mk-snap').onclick = async () => {
-    const s = await api('/snapshots', { method:'POST' });
-    toast('Snapshot ' + s.snapshot_id);
-    alert(JSON.stringify(s, null, 2));
-  };
 }
 
 async function recycle(el) {
@@ -324,11 +340,12 @@ async function consolePage(el) {
     if (ev.key !== 'Enter') return;
     const cmd = ev.target.value.trim();
     const out = document.getElementById('cout');
-    if (cmd === 'help') out.textContent = 'help apis health doctor snapshot';
+    if (cmd === 'help') out.textContent = 'help apis health doctor policy';
     else if (cmd === 'apis') out.textContent = JSON.stringify(await api('/apis'), null, 2);
     else if (cmd === 'health') out.textContent = JSON.stringify(await api('/health-db'), null, 2);
     else if (cmd === 'doctor') out.textContent = JSON.stringify(await api('/doctor'), null, 2);
-    else if (cmd === 'snapshot') out.textContent = JSON.stringify(await api('/snapshots',{method:'POST'}), null, 2);
+    else if (cmd === 'policy') out.textContent = JSON.stringify(await api('/policy'), null, 2);
+    else if (cmd === 'snapshot') out.textContent = 'Disabled. No snapshot history.';
     else out.textContent = 'unknown';
   };
 }
@@ -338,7 +355,7 @@ async function playground(el) {
     <div class="card p-4 space-y-2">
       <input id="pk" class="w-full bg-[#12151c] border border-white/10 rounded-lg px-3 py-2 text-sm" placeholder="gdb_live_..." />
       <div class="flex gap-2"><select id="pm" class="bg-[#12151c] border border-white/10 rounded-lg px-2 text-sm"><option>GET</option><option>POST</option><option>HEAD</option><option>DELETE</option></select>
-      <input id="pp" class="flex-1 bg-[#12151c] border border-white/10 rounded-lg px-3 py-2 text-sm" value="/v1/objects" /></div>
+      <input id="pp" class="flex-1 bg-[#12151c] border border-white/10 rounded-lg px-3 py-2 text-sm" value="/v1/data/bookings" /></div>
       <textarea id="pb" class="w-full h-32 bg-[#12151c] border border-white/10 rounded-lg px-3 py-2 text-sm" placeholder='{"filename":"note.txt","content":"hello","collection":"notes"}'></textarea>
       <button id="ps" class="px-3 py-2 bg-teal-500 text-black rounded-lg text-sm font-semibold">Send</button>
     </div>
@@ -370,10 +387,8 @@ async function settings(el) {
     <div>Live storage repos: ${h.data_repos}</div>
     <div>Recycle: ${h.recycle_days} days then permanent delete</div>
     <div>Upload limit: ${Math.round(h.max_file_size/1024/1024)} MB</div>
-    <div>Backup: ${h.backup_path} (${h.backup_policy})</div>
-    <button id="mk-bak" class="mt-3 px-3 py-2 bg-teal-500 text-black rounded-lg text-sm font-semibold">Write latest backup zip</button>
+    <div>Backup: ${h.backup_policy || 'disabled'}</div>
     <button id="sweep" class="mt-3 px-3 py-2 bg-[#12151c] border border-white/10 rounded-lg text-sm">Sweep recycle now</button>
   </div>`;
-  document.getElementById('mk-bak').onclick = async () => { toast('Writing backup'); const r = await api('/backup',{method:'POST'}); toast('Backup '+r.bytes+' bytes'); };
   document.getElementById('sweep').onclick = async () => { const r = await api('/recycle/sweep',{method:'POST'}); toast('Purged '+r.purged); };
 }

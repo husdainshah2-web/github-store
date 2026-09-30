@@ -17,7 +17,7 @@ app.use(securityHeaders);
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '5m', etag: true }));
+app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: 0, etag: false, lastModified: false }));
 
 const startedAt = Date.now();
 let ready = false;
@@ -39,7 +39,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     engine: 'GitDB',
-    version: '2.2.4.5',
+    version: '2.3.0',
     database: config.databaseRepo,
     data_repos: config.dataRepos.length,
     uptime_s: Math.floor((Date.now() - startedAt) / 1000),
