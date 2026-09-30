@@ -85,6 +85,7 @@ async function insertObject(api, { filename, buffer, mime_type, idempotencyKey, 
     status: 'creating',
     created_at: nowIso(),
     updated_at: nowIso(),
+    _version: 1,
     expires_at: new Date(Date.now() + (config.recycleDays || 15) * 24 * 60 * 60 * 1000).toISOString(),
   };
 
@@ -192,12 +193,18 @@ async function renameObject(api, oid, newFilename) {
 async function patchMetadata(api, oid, patch) {
   const obj = await engine.getObject(oid);
   engine.assertOwner(api, obj);
+  if (patch.expected_version != null && Number(obj._version || 1) !== Number(patch.expected_version)) {
+    const e = new Error('VERSION_CONFLICT');
+    e.status = 409; e.code = 'VERSION_CONFLICT';
+    throw e;
+  }
   if (patch.filename) obj.filename = String(patch.filename);
   if (Array.isArray(patch.tags)) obj.tags = patch.tags.map(String).slice(0, 32);
   if (patch.custom_metadata && typeof patch.custom_metadata === 'object') {
     obj.custom_metadata = { ...(obj.custom_metadata || {}), ...patch.custom_metadata };
   }
   obj.metadata_revision = (obj.metadata_revision || 1) + 1;
+  obj._version = (obj._version || 1) + 1;
   obj.updated_at = nowIso();
   await engine.writeDb(`patch meta ${oid}`, [
     { path: engine.paths.objectMetaPath(oid), contentUtf8: JSON.stringify(obj, null, 2) },

@@ -1,6 +1,7 @@
 const config = require('../config');
 const engine = require('../db/engine');
 const ops = require('./ops');
+const { isExemptCollection } = require('../db/ttl');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -23,6 +24,7 @@ async function sweepTrash() {
       const obj = await engine.getObject(id);
       if (!obj) continue;
       report.checked += 1;
+      if (isExemptCollection(obj.collection)) { report.kept += 1; continue; }
       if (!expired(obj) && obj.status !== 'deleted') {
         report.kept += 1;
         continue;

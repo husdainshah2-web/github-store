@@ -277,7 +277,10 @@ async function facesPage(el) {
     <div>OTP <span class="mono text-teal-300">/v1/auth/otp/start</span> — mail only if SMTP saved</div>
     <div>Notify <span class="mono text-teal-300">/v1/notify</span></div>
     <div>Count / explain are GitHub scans, not estimates.</div>
-    <div class="text-slate-500 mt-2">Device push returns 501 until VAPID keys exist.</div>
+    <div>Pay <span class="mono text-teal-300">POST /v1/pay/intent</span> — items[] server price</div>
+    <div>Webhook <span class="mono text-teal-300">POST /v1/pay/webhook/:apiId</span> HMAC</div>
+    <div>Attach PSP <span class="mono text-teal-300">PUT /v1/pay/psp</span></div>
+    <div class="text-slate-500 mt-2">Device push 501. Backup/snapshots off. Ledger TTL exempt.</div>
   </div>`;
 }
 
@@ -314,7 +317,7 @@ async function repos(el) {
 async function recycle(el) {
   const d = await api('/objects');
   const trash = (d.items||[]).filter(o => o.status === 'trash' || o.status === 'deleted');
-  el.innerHTML = `<div class="text-sm text-slate-400 mb-3">Trash 15 din ke baad automatic permanent delete. Backup zip hamesha backups/latest.zip overwrite hota hai.</div>` + (trash.length ? trash.map(o=>`<div class="card p-3 mb-2 flex justify-between"><div class="mono text-xs">${o.object_id}</div><button data-id="${o.object_id}" class="res text-xs px-2 py-1 bg-[#12151c] rounded">Restore</button></div>`).join('') : empty('Recycle bin is empty.'));
+  el.innerHTML = `<div class="text-sm text-slate-400 mb-3">Trash 15 din ke baad purge. orders/payments/pay_events exempt. Backup zip off.</div>` + (trash.length ? trash.map(o=>`<div class="card p-3 mb-2 flex justify-between"><div class="mono text-xs">${o.object_id}</div><button data-id="${o.object_id}" class="res text-xs px-2 py-1 bg-[#12151c] rounded">Restore</button></div>`).join('') : empty('Recycle bin is empty.'));
   el.querySelectorAll('.res').forEach(b => b.onclick = async () => { await api('/objects/'+b.dataset.id+'/restore',{method:'POST'}); go('recycle'); });
 }
 

@@ -15,6 +15,20 @@ const app = express();
 app.disable('x-powered-by');
 app.use(securityHeaders);
 app.use(cors({ origin: true }));
+
+app.post('/v1/pay/webhook/:apiId', express.raw({ type: '*/*' }), async (req, res) => {
+  try {
+    const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body || ''), 'utf8');
+    const pay = require('./db/pay');
+    const headers = {};
+    for (const [k, v] of Object.entries(req.headers)) headers[String(k).toLowerCase()] = v;
+    const out = await pay.handleWebhook(req.params.apiId, raw, headers);
+    res.json({ success: true, data: out });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: { code: err.code || 'ERROR', message: err.message } });
+  }
+});
+
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: 0, etag: false, lastModified: false }));
@@ -39,7 +53,7 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     engine: 'GitDB',
-    version: '2.3.0',
+    version: '3.0.0', format_version: 4,
     database: config.databaseRepo,
     data_repos: config.dataRepos.length,
     uptime_s: Math.floor((Date.now() - startedAt) / 1000),

@@ -12,6 +12,8 @@ const authotp = require('../db/authotp');
 const notify = require('../db/notify');
 const { parseSql } = require('../db/sqlmini');
 const enforce = require('../db/enforce');
+const pay = require('../db/pay');
+const { scanBody, requestId } = require('../security/pan');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -19,8 +21,19 @@ const upload = multer({
 });
 
 const router = express.Router();
+router.use((req, res, next) => {
+  req.requestId = requestId(req);
+  res.setHeader('X-Request-ID', req.requestId);
+  next();
+});
 router.use(apiAuth);
 router.use(rateLimit('req'));
+router.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const hits = scanBody(req.body);
+  if (hits.length) return fail(res, 422, 'PAN_REJECTED', 'Payment card fields are not allowed: ' + hits.join(','));
+  next();
+});
 
 function fileFromReq(req) {
   if (req.file) {
@@ -369,5 +382,26 @@ router.post('/push/subscribe', wrap(async (req, res) => {
 router.post('/push/send', wrap(async (_req, res) => {
   return fail(res, 501, 'WEB_PUSH_KEYS_NOT_CONFIGURED', 'Device push is not configured. Inbox /v1/notify is the real channel.');
 }));
+
+
+router.put('/pay/psp', wrap(async (req, res) => ok(res, await pay.setPsp(req.api.api_id, req.body || {}))));
+router.put('/pay/products/:id', wrap(async (req, res) => ok(res, await pay.putProduct(req.api.api_id, req.params.id, req.body || {}))));
+router.post('/pay/intent', wrap(async (req, res) => {
+  const out = await pay.createIntent(req.api.api_id, {
+    items: req.body && req.body.items,
+    order_id: req.body && req.body.order_id,
+    idempotencyKey: req.get('Idempotency-Key') || (req.body && req.body.idempotency_key),
+  });
+  return ok(res, out, out.idempotent ? 200 : 201);
+}));
+router.get('/pay/intent/:id', wrap(async (req, res) => ok(res, await pay.getIntent(req.api.api_id, req.params.id))));
+router.post('/pay/refund', wrap(async (req, res) => {
+  return ok(res, await pay.refund(req.api.api_id, {
+    intent_id: req.body && req.body.intent_id,
+    amount_minor: req.body && req.body.amount_minor,
+    idempotencyKey: req.get('Idempotency-Key') || (req.body && req.body.idempotency_key),
+  }));
+}));
+router.get('/pay/health', wrap(async (req, res) => ok(res, await pay.paymentHealth(req.api.api_id))));
 
 module.exports = router;
