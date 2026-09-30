@@ -1,8 +1,14 @@
 const catalog = require('./faces');
 
 function parseSql(q) {
-  const sql = String(q || '').trim().replace(/\s+/g, ' ');
-  const select = /^SELECT \* FROM ([a-zA-Z0-9._-]+)(?: WHERE ([a-zA-Z0-9._-]+) (=|!=|<>) (.+))?(?: LIMIT (\d+))?$/i;
+  let sql = String(q || '').trim().replace(/\s+/g, ' ');
+  let limit = 20;
+  const lim = sql.match(/\sLIMIT\s+(\d+)\s*$/i);
+  if (lim) {
+    limit = Math.min(100, Math.max(1, parseInt(lim[1], 10)));
+    sql = sql.slice(0, lim.index).trim();
+  }
+  const select = /^SELECT \* FROM ([a-zA-Z0-9._-]+)(?: WHERE ([a-zA-Z0-9._-]+)\s*(=|!=|<>)\s*(.+))?$/i;
   const m = sql.match(select);
   if (!m) {
     const e = new Error('Only SELECT * FROM collection [WHERE field = value] [LIMIT n] is allowed');
@@ -19,7 +25,7 @@ function parseSql(q) {
   return {
     collection: catalog.sanitizeCollection(m[1]),
     where: m[2] ? [{ field: m[2], op, value }] : [],
-    limit: Math.min(100, Math.max(1, parseInt(m[5] || '20', 10))),
+    limit,
   };
 }
 
