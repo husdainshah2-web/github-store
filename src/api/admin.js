@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const config = require('../config');
 const { ok, fail } = require('../utils/http');
 const { adminAuth, wrap } = require('./middleware');
+const { safeEqual, touch, clientIp } = require('../security/harden');
 const engine = require('../db/engine');
 const ops = require('../worker/ops');
 const git = require('../github/client');
@@ -11,12 +12,22 @@ const git = require('../github/client');
 const router = express.Router();
 
 router.post('/login', wrap(async (req, res) => {
-  const { username, password } = req.body || {};
-  if (username !== config.adminUser || password !== config.adminPassword) {
+  const ip = clientIp(req);
+  if (!touch('admlogin:' + ip, 15 * 60 * 1000, 8)) {
+    return fail(res, 429, 'RATE_LIMITED', 'Too many login attempts');
+  }
+  const username = String((req.body && req.body.username) || '');
+  const password = String((req.body && req.body.password) || '');
+  const userOk = safeEqual(username, config.adminUser);
+  const passOk = safeEqual(password, config.adminPassword);
+  if (!userOk || !passOk) {
     return fail(res, 401, 'UNAUTHORIZED', 'Invalid admin credentials');
   }
-  const token = jwt.sign({ role: 'admin', username }, config.jwtSecret, { expiresIn: '7d' });
-  return ok(res, { token, username });
+  const token = jwt.sign({ role: 'admin', username: config.adminUser }, config.jwtSecret, {
+    algorithm: 'HS256',
+    expiresIn: '12h',
+  });
+  return ok(res, { token, username: config.adminUser, expires_in: '12h' });
 }));
 
 router.use(adminAuth);

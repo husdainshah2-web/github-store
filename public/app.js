@@ -324,8 +324,11 @@ async function recycle(el) {
 async function security(el) {
   el.innerHTML = `<div class="grid md:grid-cols-3 gap-3">
     ${card('Isolation','API-bound','cross-API GET returns 404')}
-    ${card('Keys','hashed','gdb_live_ shown once')}
-    ${card('Token','server-only','never in UI')}
+    ${card('Login','lockout','8 tries / 15 min / IP')}
+    ${card('JWT','HS256 12h','alg none rejected')}
+    ${card('Webhook','HMAC raw','unsigned GitHub hook 401')}
+    ${card('PAN','rejected','card fields never stored')}
+    ${card('Token','server-only','never in UI or logs')}
   </div>`;
 }
 
