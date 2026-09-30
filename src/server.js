@@ -37,7 +37,7 @@ const startedAt = Date.now();
 let ready = false;
 
 app.get('/version', (req, res) => {
-  res.json({ engine: 'GitHubOnlyDB', version: '2.2.4.5', format_version: 2, brand: 'GitDB' });
+  res.json({ engine: 'GitHubOnlyDB', version: '3.0.0', format_version: 4, brand: 'GitDB' });
 });
 
 app.get('/metrics', (req, res) => {
