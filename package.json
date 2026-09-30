@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node tests/engine.test.js && node tests/isolation.test.js && node tests/cache.test.js",
+    "test": "node tests/engine.test.js && node tests/isolation.test.js && node tests/cache.test.js && node tests/faces.test.js",
     "rebuild-index": "node src/cli.js rebuild-index",
     "verify-object": "node src/cli.js verify-object",
     "reconcile": "node src/cli.js reconcile"

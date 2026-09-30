@@ -6,6 +6,20 @@ Custom object database. Persistent data lives only in GitHub repositories.
 - Repo `ghs-database` = metadata / indexes / API registry / transactions
 - Server = engine only (RAM cache, no SQLite / Postgres / Mongo)
 
+
+## Multi-face API (still GitHub-only)
+
+No SQLite / Firebase / Redis process is used. These routes store catalogs in repo 10:
+
+- `PUT/GET /v1/schema/:collection` SQLite-like field rules
+- `GET/PUT /v1/kv/:key` and `POST /v1/kv/:key/incr` Redis-like
+- `POST /v1/query` Firebase-like where
+- `POST /v1/sql` allowlisted `SELECT * FROM col WHERE field = value LIMIT n`
+- `POST /v1/auth/smtp` save encrypted Gmail app password
+- `POST /v1/auth/otp/start` + `/verify`
+- `POST/GET /v1/notify` inbox, 15-day TTL
+
+
 ## API (client never talks to GitHub)
 
 ```

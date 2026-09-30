@@ -193,3 +193,97 @@ router.get('/data/:collection/:id', wrap(async (req, res) => {
 router.delete('/data/:collection/:id', wrap(async (req, res) => {
   return ok(res, await ops.deleteObject(req.api, req.params.id));
 }));
+
+const catalog = require('../db/faces');
+const authotp = require('../db/authotp');
+const notify = require('../db/notify');
+const { parseSql } = require('../db/sqlmini');
+
+router.put('/schema/:collection', wrap(async (req, res) => {
+  const collection = catalog.sanitizeCollection(req.params.collection);
+  const fields = (req.body && req.body.fields) || {};
+  const schema = { collection, fields, updated_at: catalog.nowIso() };
+  await catalog.writeFace(req.api.api_id, 'schema ' + collection, [
+    { path: `schema/${collection}.json`, content: schema },
+  ]);
+  return ok(res, schema);
+}));
+
+router.get('/schema/:collection', wrap(async (req, res) => {
+  const collection = catalog.sanitizeCollection(req.params.collection);
+  const schema = await catalog.readFace(req.api.api_id, `schema/${collection}.json`);
+  if (!schema) return fail(res, 404, 'NOT_FOUND', 'No schema');
+  return ok(res, schema);
+}));
+
+router.put('/kv/:key', wrap(async (req, res) => {
+  const key = catalog.sanitizeKey(req.params.key);
+  if (!key) return fail(res, 422, 'INVALID_REQUEST', 'key required');
+  const rec = {
+    key,
+    value: req.body && Object.prototype.hasOwnProperty.call(req.body, 'value') ? req.body.value : req.body,
+    updated_at: catalog.nowIso(),
+    expires_at: new Date(Date.now() + 15 * 24 * 3600 * 1000).toISOString(),
+  };
+  await catalog.writeFace(req.api.api_id, 'kv set ' + key, [{ path: `kv/${key}.json`, content: rec }]);
+  return ok(res, rec);
+}));
+
+router.get('/kv/:key', wrap(async (req, res) => {
+  const key = catalog.sanitizeKey(req.params.key);
+  const rec = await catalog.readFace(req.api.api_id, `kv/${key}.json`);
+  if (!rec) return fail(res, 404, 'NOT_FOUND', 'Key not found');
+  if (rec.expires_at && new Date(rec.expires_at).getTime() < Date.now()) return fail(res, 404, 'EXPIRED', 'Key expired');
+  return ok(res, rec);
+}));
+
+router.post('/kv/:key/incr', wrap(async (req, res) => {
+  const key = catalog.sanitizeKey(req.params.key);
+  const rec = (await catalog.readFace(req.api.api_id, `kv/${key}.json`)) || {
+    key, value: 0, updated_at: catalog.nowIso(),
+    expires_at: new Date(Date.now() + 15 * 24 * 3600 * 1000).toISOString(),
+  };
+  const n = Number(rec.value) || 0;
+  rec.value = n + (Number(req.body && req.body.by) || 1);
+  rec.updated_at = catalog.nowIso();
+  await catalog.writeFace(req.api.api_id, 'kv incr ' + key, [{ path: `kv/${key}.json`, content: rec }]);
+  return ok(res, rec);
+}));
+
+router.post('/auth/smtp', wrap(async (req, res) => {
+  return ok(res, await authotp.setSmtp(req.api.api_id, req.body || {}));
+}));
+
+router.post('/auth/otp/start', wrap(async (req, res) => {
+  return ok(res, await authotp.startOtp(req.api.api_id, req.body && req.body.email));
+}));
+
+router.post('/auth/otp/verify', wrap(async (req, res) => {
+  return ok(res, await authotp.verifyOtp(req.api.api_id, req.body && req.body.email, req.body && req.body.code));
+}));
+
+router.post('/notify', wrap(async (req, res) => {
+  return ok(res, await notify.sendNotify(req.api.api_id, req.body || {}), 201);
+}));
+
+router.get('/notify', wrap(async (req, res) => {
+  return ok(res, { items: await notify.listNotify(req.api.api_id) });
+}));
+
+router.post('/notify/:id/read', wrap(async (req, res) => {
+  return ok(res, await notify.markRead(req.api.api_id, req.params.id));
+}));
+
+router.post('/sql', wrap(async (req, res) => {
+  const parsed = parseSql((req.body && (req.body.q || req.body.sql)) || '');
+  const result = await queryApi(req.api.api_id, parsed);
+  return ok(res, { dialect: 'sql-lite', backend: 'GitDB', ...parsed, items: result.items, scanned: result.scanned });
+}));
+
+router.post('/query', wrap(async (req, res) => {
+  const collection = catalog.sanitizeCollection((req.body && req.body.collection) || req.query.collection);
+  const where = Array.isArray(req.body && req.body.where) ? req.body.where : [];
+  const limit = Math.min(100, parseInt((req.body && req.body.limit) || 50, 10));
+  const result = await queryApi(req.api.api_id, { collection, where, limit });
+  return ok(res, { dialect: 'doc', backend: 'GitDB', collection, items: result.items, scanned: result.scanned });
+}));
