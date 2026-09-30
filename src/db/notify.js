@@ -17,13 +17,14 @@ async function addNotify(apiId, { title, body, user, topic }) {
   return rec;
 }
 
-async function listNotify(apiId) {
-  // lightweight: last ids live in notify/_index.json
+async function listNotify(apiId, topic) {
   const idx = (await catalog.readFace(apiId, 'notify/_index.json')) || { ids: [] };
   const items = [];
   for (const id of (idx.ids || []).slice(0, 50)) {
     const row = await catalog.readFace(apiId, `notify/${id}.json`);
-    if (row && new Date(row.expires_at).getTime() > Date.now()) items.push(row);
+    if (!row || new Date(row.expires_at).getTime() <= Date.now()) continue;
+    if (topic && row.topic !== topic) continue;
+    items.push(row);
   }
   return items;
 }

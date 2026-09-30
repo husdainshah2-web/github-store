@@ -7,6 +7,11 @@ const engine = require('../db/engine');
 const ops = require('../worker/ops');
 const { queryApi } = require('../db/query');
 const mode = require('../security/mode');
+const catalog = require('../db/faces');
+const authotp = require('../db/authotp');
+const notify = require('../db/notify');
+const { parseSql } = require('../db/sqlmini');
+const enforce = require('../db/enforce');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -165,8 +170,10 @@ module.exports = router;
 
 // Firebase-like collection/document API. Same GitHub storage. 15-day TTL.
 router.post('/data/:collection', rateLimit('upload'), wrap(async (req, res) => {
-  const collection = req.params.collection;
+  await enforce.assertCanWrite(req.api, req);
+  const collection = catalog.sanitizeCollection(req.params.collection);
   const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const pending = await enforce.enforceDocument(req.api.api_id, collection, body, body.id || null);
   const file = {
     filename: (body.id || body.doc_id || 'doc') + '.json',
     buffer: Buffer.from(JSON.stringify(body), 'utf8'),
@@ -175,7 +182,8 @@ router.post('/data/:collection', rateLimit('upload'), wrap(async (req, res) => {
     custom_metadata: { firebase: true, doc_id: body.id || body.doc_id || null },
   };
   const result = await ops.insertObject(req.api, file);
-  return ok(res, { id: result.object_id, collection, status: result.status }, 201);
+  await enforce.commitUniques(req.api.api_id, pending.uniqueWrites, result.object_id);
+  return ok(res, { id: result.object_id, collection, status: result.status, tx_id: result.tx_id }, 201);
 }));
 
 router.get('/data/:collection', wrap(async (req, res) => {
@@ -193,11 +201,6 @@ router.get('/data/:collection/:id', wrap(async (req, res) => {
 router.delete('/data/:collection/:id', wrap(async (req, res) => {
   return ok(res, await ops.deleteObject(req.api, req.params.id));
 }));
-
-const catalog = require('../db/faces');
-const authotp = require('../db/authotp');
-const notify = require('../db/notify');
-const { parseSql } = require('../db/sqlmini');
 
 router.put('/schema/:collection', wrap(async (req, res) => {
   const collection = catalog.sanitizeCollection(req.params.collection);
@@ -267,7 +270,7 @@ router.post('/notify', wrap(async (req, res) => {
 }));
 
 router.get('/notify', wrap(async (req, res) => {
-  return ok(res, { items: await notify.listNotify(req.api.api_id) });
+  return ok(res, { items: await notify.listNotify(req.api.api_id, req.query.topic) });
 }));
 
 router.post('/notify/:id/read', wrap(async (req, res) => {
@@ -286,4 +289,86 @@ router.post('/query', wrap(async (req, res) => {
   const limit = Math.min(100, parseInt((req.body && req.body.limit) || 50, 10));
   const result = await queryApi(req.api.api_id, { collection, where, limit });
   return ok(res, { dialect: 'doc', backend: 'GitDB', collection, items: result.items, scanned: result.scanned });
+}));
+
+router.put('/rules', wrap(async (req, res) => {
+  const rec = {
+    read: req.body && req.body.read === 'session' ? 'session' : 'api-key',
+    write: req.body && req.body.write === 'session' ? 'session' : 'api-key',
+    updated_at: catalog.nowIso(),
+  };
+  await catalog.writeFace(req.api.api_id, 'rules', [{ path: 'rules.json', content: rec }]);
+  return ok(res, rec);
+}));
+
+router.get('/rules', wrap(async (req, res) => {
+  return ok(res, await enforce.loadRules(req.api.api_id));
+}));
+
+router.post('/batch', wrap(async (req, res) => {
+  await enforce.assertCanWrite(req.api, req);
+  const opsIn = Array.isArray(req.body && req.body.ops) ? req.body.ops.slice(0, 20) : [];
+  if (!opsIn.length) return fail(res, 422, 'INVALID_REQUEST', 'ops array required');
+  const results = [];
+  for (const item of opsIn) {
+    const collection = catalog.sanitizeCollection(item.collection);
+    const doc = item.doc && typeof item.doc === 'object' ? item.doc : {};
+    const pending = await enforce.enforceDocument(req.api.api_id, collection, doc, doc.id || null);
+    const file = {
+      filename: (doc.id || 'doc') + '.json',
+      buffer: Buffer.from(JSON.stringify(doc), 'utf8'),
+      mime_type: 'application/json',
+      collection,
+      custom_metadata: { doc_id: doc.id || null },
+    };
+    const result = await ops.insertObject(req.api, file);
+    await enforce.commitUniques(req.api.api_id, pending.uniqueWrites, result.object_id);
+    results.push({ id: result.object_id, collection, tx_id: result.tx_id, status: result.status });
+  }
+  return ok(res, { backend: 'GitDB', count: results.length, items: results }, 201);
+}));
+
+router.get('/count/:collection', wrap(async (req, res) => {
+  const collection = catalog.sanitizeCollection(req.params.collection);
+  const result = await queryApi(req.api.api_id, { collection, limit: 10000, scanLimit: 10000 });
+  return ok(res, {
+    collection,
+    count: result.items.length,
+    scanned: result.scanned,
+    truncated: result.next_cursor != null,
+    backend: 'GitDB',
+  });
+}));
+
+router.post('/explain', wrap(async (req, res) => {
+  const parsed = req.body && req.body.q
+    ? parseSql(req.body.q)
+    : {
+      collection: catalog.sanitizeCollection(req.body && req.body.collection),
+      where: Array.isArray(req.body && req.body.where) ? req.body.where : [],
+      limit: 20,
+    };
+  const result = await queryApi(req.api.api_id, { ...parsed, limit: parsed.limit || 20 });
+  return ok(res, {
+    backend: 'GitDB',
+    plan: 'full-scan-with-filters',
+    collection: parsed.collection,
+    where: parsed.where || [],
+    scanned: result.scanned,
+    matched: result.items.length,
+    note: 'No external search engine. Count is from GitHub object index scan.',
+  });
+}));
+
+router.post('/push/subscribe', wrap(async (req, res) => {
+  const sub = req.body && req.body.subscription;
+  if (!sub || !sub.endpoint) return fail(res, 422, 'INVALID_REQUEST', 'subscription.endpoint required');
+  const rec = { endpoint: String(sub.endpoint).slice(0, 500), created_at: catalog.nowIso() };
+  const key = catalog.sanitizeKey(Buffer.from(rec.endpoint).toString('hex').slice(0, 32) || 'sub');
+  await catalog.writeFace(req.api.api_id, 'push sub', [{ path: `push/${key}.json`, content: rec }]);
+  return ok(res, { stored: true, send: false, reason: 'WEB_PUSH_KEYS_NOT_CONFIGURED' }, 201);
+}));
+
+router.post('/push/send', wrap(async (_req, res) => {
+  return fail(res, 501, 'WEB_PUSH_KEYS_NOT_CONFIGURED', 'Device push is not configured. Inbox /v1/notify is the real channel.');
 }));
