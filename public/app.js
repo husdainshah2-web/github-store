@@ -128,12 +128,8 @@ function esc(s) {
 async function createApi() {
   const name = prompt('API name');
   if (!name) return;
-  const username = prompt('API username (clients login with this)');
-  if (!username) return;
-  const password = prompt('API password (min 8 characters)');
-  if (!password || password.length < 8) { toast('Password min 8'); return; }
-  const created = await api('/apis', { method:'POST', body: JSON.stringify({ name, username, password }) });
-  alert('Save this API key now:\n' + created.api_key + '\n\nClients must POST /v1/login with username/password first.');
+  const created = await api('/apis', { method:'POST', body: JSON.stringify({ name }) });
+  alert('API created. Client login: POST /v1/login with the shared operator user/pass + this API name.\nKey:\n' + created.api_key);
   go('apis');
 }
 

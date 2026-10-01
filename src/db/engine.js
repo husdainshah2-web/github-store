@@ -82,8 +82,8 @@ async function findApiByKey(rawKey) {
 }
 
 async function createApi(name, creds = {}) {
-  const username = String(creds.username || '').trim();
-  const password = String(creds.password || '');
+  const username = String(creds.username || config.apiOperatorUser || '').trim();
+  const password = String(creds.password || config.apiOperatorPassword || '');
   if (!username || username.length < 3) {
     const e = new Error('username required (min 3)');
     e.status = 422; e.code = 'INVALID_REQUEST';
@@ -247,6 +247,29 @@ async function rebuildIndex() {
   return { apis: idx.ids.length, indexes: Object.keys(byApi).length };
 }
 
+async function applyDefaultOperator() {
+  const bcrypt = require('bcryptjs');
+  const username = String(config.apiOperatorUser || '').trim();
+  const password = String(config.apiOperatorPassword || '');
+  if (!username || password.length < 8) return { updated: 0 };
+  const hash = bcrypt.hashSync(password, 10);
+  const idx = (await readJson('indexes/apis.json')) || { ids: [] };
+  let updated = 0;
+  for (const id of idx.ids || []) {
+    const rec = await getApi(id);
+    if (!rec || rec.status === 'deleted') continue;
+    rec.operator_username = username;
+    rec.password_hash = hash;
+    rec.updated_at = nowIso();
+    await writeDb(`set operator ${id}`, [
+      { path: paths.apiPath(id), contentUtf8: JSON.stringify(rec, null, 2) },
+    ]);
+    cache.apis.set(id, rec);
+    updated += 1;
+  }
+  return { updated };
+}
+
 async function loginApi(name, username, password) {
   const bcrypt = require('bcryptjs');
   const { safeEqual } = require('../security/harden');
@@ -277,6 +300,7 @@ module.exports = {
   listApis,
   findApiByKey,
   loginApi,
+  applyDefaultOperator,
   rebuildKeyMap,
   createApi,
   updateApi,

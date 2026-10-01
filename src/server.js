@@ -129,6 +129,7 @@ async function start() {
   try {
     await bootstrap();
     await engine.rebuildKeyMap().catch(() => {});
+    await engine.applyDefaultOperator().catch((err) => console.error('operator sync', err.message));
     ready = true;
     require('./worker/recycle').startRecycleWorker();
     require('./monitoring/repoCache').getRepos(true).catch(() => {});

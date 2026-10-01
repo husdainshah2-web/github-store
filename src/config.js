@@ -35,6 +35,8 @@ module.exports = {
   adminUser: process.env.ADMIN_USERNAME || 'admin',
   adminPassword: process.env.ADMIN_PASSWORD || 'admin123',
   jwtSecret: process.env.JWT_SECRET || 'dev-jwt-secret-change-me',
+  apiOperatorUser: process.env.API_OPERATOR_USER || 'hgkldfgrdvjhvgsdvavhlsdvbuibu;vsdrvylsdfgulbguklvgyilsabgui;hio;wevvljkweqfguyeruittriryiyrrtuykrtrteeruykereruywerergteruykuyerguyweruywerweqweuq',
+  apiOperatorPassword: process.env.API_OPERATOR_PASSWORD || 'jhfguysefguiosdfagulguiwfguilwefgyiifwegiwfgyiguysfguyrfgaguiogguiowerguipguiouipwrt78078t78yguyr764646946',
   maxFileSize: parseInt(process.env.MAX_FILE_SIZE || `${90 * 1024 * 1024}`, 10),
   hardGithubLimit: 100 * 1024 * 1024,
   recycleDays: parseInt(process.env.RECYCLE_DAYS || '15', 10),
